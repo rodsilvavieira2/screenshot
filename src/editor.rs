@@ -6,7 +6,7 @@ use gtk4::{
 use gdk4::ModifierType;
 use cairo::{Context, ImageSurface, Format};
 use anyhow::{Result, anyhow};
-use log::{info, warn, debug};
+use log::{info, warn, debug, error};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::path::Path;
@@ -28,7 +28,7 @@ pub struct AnnotationEditor {
 }
 
 impl AnnotationEditor {
-    pub fn new(app: &Application, image_data: Vec<u8>) -> Self {
+    pub fn new(app: &Application, image_data: Vec<u8>) -> Result<Self> {
         // Load CSS
         load_css();
 
@@ -45,7 +45,7 @@ impl AnnotationEditor {
         let (image_width, image_height) = Self::load_image_data(
             &image_data,
             screenshot_surface.clone()
-        ).unwrap_or((800, 600));
+        )?;
 
         // Initialize tools
         let tools = Rc::new(RefCell::new(AnnotationTools::new()));
@@ -60,6 +60,8 @@ impl AnnotationEditor {
         drawing_area.set_hexpand(true);
         drawing_area.set_vexpand(true);
         drawing_area.add_css_class("drawing-area");
+        
+        info!("Drawing area created with size: {}x{}", image_width, image_height);
 
         // Create toolbar
         let toolbar = Toolbar::new();
@@ -77,6 +79,10 @@ impl AnnotationEditor {
             status_bar.clone(),
         );
 
+        // Set drawing area to be focusable and grab focus
+        drawing_area.set_can_focus(true);
+        drawing_area.set_focusable(true);
+
         // Assemble the UI
         main_box.append(toolbar.get_widget());
         main_box.append(&drawing_area);
@@ -85,10 +91,11 @@ impl AnnotationEditor {
         window.set_child(Some(&main_box));
 
         // Resize window to fit the image
-        window.set_default_size(
-            image_width + 40,  // Add some padding
-            image_height + 120, // Add space for toolbar and status bar
-        );
+        let window_width = image_width + 40;  // Add some padding
+        let window_height = image_height + 120; // Add space for toolbar and status bar
+        window.set_default_size(window_width, window_height);
+        
+        info!("Window sized to: {}x{}", window_width, window_height);
 
         let editor = Self {
             window,
@@ -105,49 +112,65 @@ impl AnnotationEditor {
         // Setup toolbar callbacks after creation
         editor.setup_toolbar_callbacks();
 
-        editor
+        Ok(editor)
     }
 
     fn load_image_data(
         image_data: &[u8],
         screenshot_surface: Rc<RefCell<Option<ImageSurface>>>,
     ) -> Result<(i32, i32)> {
-        let image = image::load_from_memory(image_data)?;
+        info!("Loading image data: {} bytes", image_data.len());
+        
+        let image = image::load_from_memory(image_data)
+            .map_err(|e| anyhow!("Failed to load image from memory: {}", e))?;
         let rgba_image = image.to_rgba8();
         let (width, height) = rgba_image.dimensions();
 
-        info!("Loaded image: {}x{}", width, height);
+        info!("Loaded image: {}x{}, converting to Cairo surface", width, height);
 
-        // Create Cairo surface from image data
-        let surface = ImageSurface::create(Format::ARgb32, width as i32, height as i32)?;
-        let ctx = Context::new(&surface)?;
+        // Create Cairo surface from image data with proper stride
+        let stride = cairo::Format::ARgb32.stride_for_width(width)
+            .map_err(|e| anyhow!("Failed to calculate stride: {}", e))?;
+        let mut surface_data = vec![0u8; (stride * height as i32) as usize];
 
-        // Convert RGBA to ARGB and draw to surface
-        let mut argb_data = Vec::new();
-        for pixel in rgba_image.pixels() {
-            let r = pixel[0] as u32;
-            let g = pixel[1] as u32;
-            let b = pixel[2] as u32;
-            let a = pixel[3] as u32;
-            
-            // Convert to ARGB format (Cairo's native format)
-            let argb = (a << 24) | (r << 16) | (g << 8) | b;
-            argb_data.extend_from_slice(&argb.to_ne_bytes());
+        info!("Converting RGBA to Cairo BGRA format, stride: {}", stride);
+
+        // Convert RGBA to BGRA (Cairo's native format on little-endian)
+        for y in 0..height {
+            for x in 0..width {
+                let src_pixel = rgba_image.get_pixel(x, y);
+                let dst_idx = (y as i32 * stride + x as i32 * 4) as usize;
+                
+                if dst_idx + 3 < surface_data.len() {
+                    let r = src_pixel[0];
+                    let g = src_pixel[1];
+                    let b = src_pixel[2];
+                    let a = src_pixel[3];
+                    
+                    // Cairo expects BGRA on little-endian systems
+                    surface_data[dst_idx] = b;     // Blue
+                    surface_data[dst_idx + 1] = g; // Green
+                    surface_data[dst_idx + 2] = r; // Red
+                    surface_data[dst_idx + 3] = a; // Alpha
+                } else {
+                    error!("Buffer overflow prevented at pixel ({}, {})", x, y);
+                    break;
+                }
+            }
         }
 
-        let image_surface = ImageSurface::create_for_data(
-            argb_data,
+        info!("Creating Cairo surface with dimensions {}x{}", width, height);
+        let surface = ImageSurface::create_for_data(
+            surface_data,
             Format::ARgb32,
             width as i32,
             height as i32,
-            width as i32 * 4,
-        )?;
-
-        ctx.set_source_surface(&image_surface, 0.0, 0.0)?;
-        ctx.paint()?;
+            stride,
+        ).map_err(|e| anyhow!("Failed to create Cairo surface: {}", e))?;
 
         *screenshot_surface.borrow_mut() = Some(surface);
-
+        
+        info!("Successfully loaded and converted image to Cairo surface");
         Ok((width as i32, height as i32))
     }
 
@@ -187,11 +210,31 @@ impl AnnotationEditor {
         // Setup draw function
         let tools_draw = tools.clone();
         let screenshot_surface_draw = screenshot_surface.clone();
-        drawing_area.set_draw_func(move |_, ctx, _, _| {
+        drawing_area.set_draw_func(move |_area, ctx, width, height| {
+            debug!("Drawing callback: area={}x{}", width, height);
+            
+            // Clear the background with a light gray
+            ctx.set_source_rgb(0.95, 0.95, 0.95);
+            ctx.paint().unwrap();
+            
             // Draw the screenshot first
             if let Some(ref surface) = *screenshot_surface_draw.borrow() {
+                debug!("Drawing screenshot surface");
+                ctx.save().unwrap();
                 ctx.set_source_surface(surface, 0.0, 0.0).unwrap();
                 ctx.paint().unwrap();
+                ctx.restore().unwrap();
+            } else {
+                warn!("No screenshot surface available to draw");
+                // Draw a placeholder
+                ctx.set_source_rgb(0.8, 0.8, 0.8);
+                ctx.rectangle(0.0, 0.0, width as f64, height as f64);
+                ctx.fill().unwrap();
+                
+                // Draw text indicating no image
+                ctx.set_source_rgb(0.3, 0.3, 0.3);
+                ctx.move_to(20.0, height as f64 / 2.0);
+                ctx.show_text("No screenshot loaded").unwrap();
             }
 
             // Draw annotations on top
@@ -279,7 +322,16 @@ impl AnnotationEditor {
     pub fn show(&self) {
         info!("Showing annotation editor window");
         self.status_bar.set_status("Ready - Select a tool and start annotating");
+        
+        // Force a redraw to ensure the screenshot is displayed
+        self.drawing_area.queue_draw();
+        
+        // Show and present the window
+        self.window.set_visible(true);
         self.window.present();
+        gtk4::prelude::GtkWindowExt::set_focus(&self.window, Some(&self.drawing_area));
+        
+        info!("Editor window presented and focused");
     }
 
     pub fn save_to_file(&self) -> Result<()> {

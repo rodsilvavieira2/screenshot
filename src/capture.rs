@@ -31,55 +31,90 @@ impl ScreenshotCapture {
         false
     }
 
-    pub async fn take_screenshot(&self) -> Result<Vec<u8>> {
+    pub fn take_screenshot_blocking(&self) -> Result<Vec<u8>> {
+        info!("Starting screenshot capture process");
+        
         if self.use_portal {
             info!("Attempting screenshot via portal");
-            match self.take_screenshot_portal().await {
-                Ok(data) => return Ok(data),
+            match self.take_screenshot_portal_blocking() {
+                Ok(data) => {
+                    info!("Portal screenshot successful");
+                    return Ok(data);
+                },
                 Err(e) => {
                     warn!("Portal screenshot failed: {}, falling back to X11", e);
-                    return self.take_screenshot_x11().await;
+                    // Continue to X11 fallback
                 }
             }
-        } else {
-            info!("Taking screenshot via X11 fallback");
-            self.take_screenshot_x11().await
         }
+        
+        info!("Taking screenshot via X11 fallback");
+        self.take_screenshot_x11_blocking()
+            .map_err(|e| anyhow!("Screenshot capture failed: {}. Please ensure you're running in a graphical environment with proper permissions.", e))
     }
 
-    async fn take_screenshot_portal(&self) -> Result<Vec<u8>> {
+    fn take_screenshot_portal_blocking(&self) -> Result<Vec<u8>> {
+        info!("Attempting to use portal for screenshot capture");
+        
+        // Add delay to ensure UI is hidden
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        
         // For V1.0, we'll use a simplified approach
         // In a full implementation, we'd use the portal properly
         warn!("Portal screenshot not fully implemented in V1.0 - falling back to X11");
-        self.take_screenshot_x11().await
+        self.take_screenshot_x11_blocking()
     }
 
-    async fn take_screenshot_x11(&self) -> Result<Vec<u8>> {
+    fn take_screenshot_x11_blocking(&self) -> Result<Vec<u8>> {
         info!("Using X11 fallback for screenshot capture");
         
+        // Add delay to ensure capture window is hidden
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        
         // Use screenshots crate for X11 fallback
-        let screens = screenshots::Screen::all()?;
+        let screens = screenshots::Screen::all()
+            .map_err(|e| anyhow!("Failed to enumerate screens: {}. Make sure you're running in a graphical environment.", e))?;
         
         if screens.is_empty() {
-            return Err(anyhow!("No screens found"));
+            return Err(anyhow!("No screens found. Make sure you're running in a graphical environment with a display."));
         }
         
         // For V1.0, we only capture the primary screen (full screen)
         let screen = &screens[0];
-        let image = screen.capture()?;
+        info!("Capturing screen: {}x{}", screen.display_info.width, screen.display_info.height);
+        
+        let image = screen.capture()
+            .map_err(|e| anyhow!("Failed to capture screen: {}. This might be due to permissions or running in a headless environment.", e))?;
         
         // Convert screenshots::Image to PNG bytes
         let width = image.width() as u32;
         let height = image.height() as u32;
+        
+        if width == 0 || height == 0 {
+            return Err(anyhow!("Invalid screen dimensions: {}x{}", width, height));
+        }
+        
         let rgba_data = image.rgba();
+        
+        if rgba_data.is_empty() {
+            return Err(anyhow!("Screenshot capture returned empty image data"));
+        }
+        
+        info!("Converting {}x{} image to PNG", width, height);
         
         // Create image::RgbaImage and save as PNG
         let img = image::RgbaImage::from_raw(width, height, rgba_data.clone())
-            .ok_or_else(|| anyhow!("Failed to create image from raw data"))?;
+            .ok_or_else(|| anyhow!("Failed to create image from raw data. Image size: {}x{}, data length: {}", width, height, rgba_data.len()))?;
         
         let mut buffer = Vec::new();
-        img.write_to(&mut std::io::Cursor::new(&mut buffer), image::ImageOutputFormat::Png)?;
+        img.write_to(&mut std::io::Cursor::new(&mut buffer), image::ImageOutputFormat::Png)
+            .map_err(|e| anyhow!("Failed to convert image to PNG: {}", e))?;
         
+        if buffer.is_empty() {
+            return Err(anyhow!("PNG conversion resulted in empty buffer"));
+        }
+        
+        info!("Screenshot converted to PNG, {} bytes", buffer.len());
         Ok(buffer)
     }
 

@@ -72,9 +72,10 @@ cargo install --path .
 ### Basic Workflow
 
 1. **Launch Flint**: Run `flint` from terminal or application menu
-2. **Select Capture Area**: On Wayland, the system portal will appear for region/window selection
-3. **Annotate**: Use the toolbar to select tools and draw on your screenshot
-4. **Export**: Save to file or copy to clipboard
+2. **Click "Take Screenshot"**: A capture interface will appear with a button to initiate screenshot
+3. **Select Capture Area**: On Wayland, the system portal will appear for region/window selection; on X11, full screen is captured
+4. **Annotate**: The editor opens automatically with your screenshot loaded - use the toolbar to select tools and draw
+5. **Export**: Save to file or copy to clipboard using the toolbar buttons
 
 ### Keyboard Shortcuts
 

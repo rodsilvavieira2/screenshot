@@ -360,10 +360,42 @@ impl Default for StatusBar {
 pub fn load_css() {
     let provider = gtk4::CssProvider::new();
     let css = r#"
+        /* Capture Interface Styling */
+        .capture-window {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+        }
+        
+        .capture-button {
+            font-size: 16px;
+            font-weight: bold;
+            padding: 12px 24px;
+            border-radius: 8px;
+            transition: all 200ms ease;
+        }
+        
+        .capture-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .capture-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .capture-description {
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+        
+        /* Editor Interface Styling */
         .toolbar {
             background-color: @theme_bg_color;
             border-bottom: 1px solid @borders;
             padding: 6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
         
         .statusbar {
@@ -371,15 +403,56 @@ pub fn load_css() {
             border-top: 1px solid @borders;
             padding: 3px;
             font-size: 0.9em;
+            font-family: monospace;
         }
         
         .drawing-area {
-            background-color: white;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+        }
+        
+        .tool-button {
+            min-width: 50px;
+            min-height: 40px;
+            padding: 8px;
+            margin: 2px;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        
+        .tool-button:checked {
+            background: @accent_color;
+            color: @accent_fg_color;
         }
         
         button {
             min-width: 60px;
             padding: 6px 12px;
+            border-radius: 6px;
+            transition: all 150ms ease;
+        }
+        
+        button:hover {
+            transform: translateY(-1px);
+        }
+        
+        .destructive-action {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .destructive-action:hover {
+            background: #c0392b;
+        }
+        
+        .suggested-action {
+            background: #27ae60;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .suggested-action:hover {
+            background: #229954;
         }
         
         scale {
@@ -388,6 +461,17 @@ pub fn load_css() {
         
         combobox {
             min-width: 80px;
+            padding: 4px 8px;
+        }
+        
+        /* Animations */
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .fade-in {
+            animation: fade-in 300ms ease-out;
         }
     "#;
     
