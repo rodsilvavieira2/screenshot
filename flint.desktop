@@ -1,0 +1,20 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Flint
+GenericName=Screenshot Tool
+Comment=Fast screenshot and annotation utility for Linux
+Exec=flint
+Icon=flint
+Terminal=false
+Categories=Graphics;Photography;Utility;
+Keywords=screenshot;capture;annotate;edit;image;
+StartupNotify=true
+StartupWMClass=flint
+MimeType=image/png;image/jpeg;image/bmp;image/tiff;
+Actions=capture;
+
+[Desktop Action capture]
+Name=Take Screenshot
+Exec=flint
+Icon=flint

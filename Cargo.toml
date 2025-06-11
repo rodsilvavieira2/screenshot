@@ -1,6 +1,39 @@
 [package]
-name = "screenshot"
-version = "0.1.0"
-edition = "2024"
+name = "flint"
+version = "1.0.0"
+edition = "2021"
+description = "A high-performance, native screenshot and annotation utility for Linux"
+authors = ["Flint Team"]
+license = "MIT"
 
 [dependencies]
+gtk4 = "0.8"
+gdk4 = "0.8"
+cairo-rs = "0.19"
+gio = "0.19"
+glib = "0.19"
+ashpd = "0.7"
+screenshots = "0.7"
+image = "0.24"
+tokio = { version = "1.0", features = ["full"] }
+anyhow = "1.0"
+log = "0.4"
+env_logger = "0.10"
+arboard = "3.2"
+
+[dependencies.gdk4-wayland]
+version = "0.8"
+optional = true
+
+[dependencies.gdk4-x11]
+version = "0.8"
+optional = true
+
+[features]
+default = ["wayland", "x11"]
+wayland = ["dep:gdk4-wayland"]
+x11 = ["dep:gdk4-x11"]
+
+[[bin]]
+name = "flint"
+path = "src/main.rs"

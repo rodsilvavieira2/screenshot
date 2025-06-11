@@ -1,0 +1,118 @@
+use anyhow::{Result, anyhow};
+use log::{info, warn, debug};
+use std::path::PathBuf;
+
+pub struct ScreenshotCapture {
+    pub use_portal: bool,
+}
+
+impl ScreenshotCapture {
+    pub fn new() -> Self {
+        // Check if we're running on Wayland and if portal is available
+        let use_portal = Self::detect_portal_availability();
+        
+        Self { use_portal }
+    }
+
+    fn detect_portal_availability() -> bool {
+        // Check for Wayland session
+        if std::env::var("WAYLAND_DISPLAY").is_ok() {
+            debug!("Wayland session detected");
+            return true;
+        }
+        
+        // Check for XDG portal even on X11
+        if std::env::var("XDG_CURRENT_DESKTOP").is_ok() {
+            debug!("XDG desktop session detected, will try portal");
+            return true;
+        }
+        
+        debug!("No portal environment detected, falling back to X11");
+        false
+    }
+
+    pub async fn take_screenshot(&self) -> Result<Vec<u8>> {
+        if self.use_portal {
+            info!("Attempting screenshot via portal");
+            match self.take_screenshot_portal().await {
+                Ok(data) => return Ok(data),
+                Err(e) => {
+                    warn!("Portal screenshot failed: {}, falling back to X11", e);
+                    return self.take_screenshot_x11().await;
+                }
+            }
+        } else {
+            info!("Taking screenshot via X11 fallback");
+            self.take_screenshot_x11().await
+        }
+    }
+
+    async fn take_screenshot_portal(&self) -> Result<Vec<u8>> {
+        // For V1.0, we'll use a simplified approach
+        // In a full implementation, we'd use the portal properly
+        warn!("Portal screenshot not fully implemented in V1.0 - falling back to X11");
+        self.take_screenshot_x11().await
+    }
+
+    async fn take_screenshot_x11(&self) -> Result<Vec<u8>> {
+        info!("Using X11 fallback for screenshot capture");
+        
+        // Use screenshots crate for X11 fallback
+        let screens = screenshots::Screen::all()?;
+        
+        if screens.is_empty() {
+            return Err(anyhow!("No screens found"));
+        }
+        
+        // For V1.0, we only capture the primary screen (full screen)
+        let screen = &screens[0];
+        let image = screen.capture()?;
+        
+        // Convert screenshots::Image to PNG bytes
+        let width = image.width() as u32;
+        let height = image.height() as u32;
+        let rgba_data = image.rgba();
+        
+        // Create image::RgbaImage and save as PNG
+        let img = image::RgbaImage::from_raw(width, height, rgba_data.clone())
+            .ok_or_else(|| anyhow!("Failed to create image from raw data"))?;
+        
+        let mut buffer = Vec::new();
+        img.write_to(&mut std::io::Cursor::new(&mut buffer), image::ImageOutputFormat::Png)?;
+        
+        Ok(buffer)
+    }
+
+    fn uri_to_path(uri: &str) -> Result<PathBuf> {
+        if uri.starts_with("file://") {
+            let path_str = &uri[7..]; // Remove "file://" prefix
+            Ok(PathBuf::from(path_str))
+        } else {
+            Err(anyhow!("Unsupported URI scheme: {}", uri))
+        }
+    }
+}
+
+impl Default for ScreenshotCapture {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_uri_to_path() {
+        let uri = "file:///tmp/screenshot.png";
+        let path = ScreenshotCapture::uri_to_path(uri).unwrap();
+        assert_eq!(path, PathBuf::from("/tmp/screenshot.png"));
+    }
+
+    #[test]
+    fn test_portal_detection() {
+        // This test just ensures the detection doesn't panic
+        let _use_portal = ScreenshotCapture::detect_portal_availability();
+    }
+}

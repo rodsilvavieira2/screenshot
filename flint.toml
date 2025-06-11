@@ -1,0 +1,157 @@
+# Flint Configuration File
+# This file contains settings for the Flint screenshot and annotation tool
+# Edit this file to customize behavior (future versions will support this)
+
+[general]
+# Default screenshot format
+format = "png"
+
+# Quality for JPEG format (1-100, only used if format is "jpeg")
+jpeg_quality = 90
+
+# Default save location
+# Use special variables: $HOME, $DESKTOP, $PICTURES, $DOCUMENTS
+save_path = "$PICTURES/Screenshots"
+
+# Auto-save screenshots (without opening editor)
+auto_save = false
+
+# Default filename pattern
+# Variables: $DATE, $TIME, $TIMESTAMP, $COUNTER
+filename_pattern = "flint-$DATE-$TIME"
+
+[ui]
+# Default window size for annotation editor
+window_width = 1000
+window_height = 700
+
+# Show toolbar by default
+show_toolbar = true
+
+# Show status bar by default
+show_statusbar = true
+
+# Theme preference ("auto", "light", "dark")
+theme = "auto"
+
+[tools]
+# Default annotation tool
+default_tool = "pencil"
+
+# Default color (hex format)
+default_color = "#ff0000"
+
+# Default thickness
+default_thickness = 3.0
+
+# Available colors in the color picker
+colors = [
+    "#ff0000",  # Red
+    "#00cc00",  # Green
+    "#0066ff",  # Blue
+    "#ffee00",  # Yellow
+    "#ff66cc",  # Pink
+    "#00cccc",  # Cyan
+    "#000000",  # Black
+    "#ffffff"   # White
+]
+
+# Available thickness options
+thickness_options = [1.0, 3.0, 5.0, 8.0, 12.0]
+
+[pencil]
+# Pencil-specific settings
+smooth_lines = true
+pressure_sensitivity = false
+
+[highlighter]
+# Highlighter opacity (0.0 to 1.0)
+opacity = 0.3
+
+# Default highlighter colors
+colors = ["#ffee00", "#00cc00", "#ff66cc"]
+
+[arrow]
+# Arrow head size multiplier
+head_size = 3.0
+
+# Arrow head angle in degrees
+head_angle = 30.0
+
+[capture]
+# Delay before capture (in milliseconds)
+capture_delay = 0
+
+# Show capture countdown
+show_countdown = false
+
+# Capture cursor in screenshot
+include_cursor = false
+
+# Portal preference ("auto", "force", "disable")
+# auto: Use portal on Wayland, fallback on X11
+# force: Always try portal first
+# disable: Never use portal
+portal_mode = "auto"
+
+[keyboard]
+# Keyboard shortcuts (future feature)
+# Format: "modifier+key" = "action"
+
+# Note: These shortcuts are not implemented in v1.0
+# They are placeholders for future versions
+shortcuts = [
+    { keys = "Ctrl+S", action = "save" },
+    { keys = "Ctrl+C", action = "copy" },
+    { keys = "Ctrl+Z", action = "undo" },
+    { keys = "Ctrl+Y", action = "redo" },
+    { keys = "Delete", action = "clear" },
+    { keys = "Escape", action = "cancel" }
+]
+
+[export]
+# Default export options
+copy_to_clipboard = true
+save_to_file = false
+
+# Automatic filename increments
+auto_increment = true
+
+# Export metadata
+include_metadata = false
+
+[advanced]
+# Memory usage limits
+max_image_size = "50MB"
+
+# Maximum undo levels (future feature)
+max_undo_levels = 10
+
+# Temporary file cleanup
+cleanup_temp_files = true
+
+# Debug logging
+debug_mode = false
+
+# Performance settings
+hardware_acceleration = true
+antialiasing = true
+
+[wayland]
+# Wayland-specific settings
+portal_timeout = 30  # seconds
+
+# Preferred portal backend
+# Leave empty for automatic detection
+portal_backend = ""
+
+[x11]
+# X11-specific settings
+# Capture method ("xlib", "xcb")
+capture_method = "xcb"
+
+# Include window decorations
+include_decorations = true
+
+# Multi-monitor handling
+monitor_selection = "primary"  # "primary", "all", "current"
