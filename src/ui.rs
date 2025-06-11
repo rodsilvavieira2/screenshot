@@ -402,11 +402,21 @@ pub fn load_css() {
             padding: 12px 24px;
             border-radius: 8px;
             transition: all 200ms ease;
+            margin: 5px 0;
         }
         
         .capture-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .capture-button:not(.suggested-action) {
+            background: #3498db;
+            color: white;
+        }
+        
+        .capture-button:not(.suggested-action):hover {
+            background: #2980b9;
         }
         
         .capture-title {

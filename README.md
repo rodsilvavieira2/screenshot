@@ -5,6 +5,8 @@ A fast, native screenshot and annotation utility for Linux desktop environments,
 ## Features
 
 - **Fast Screenshot Capture**: Sub-2-second workflow from capture to annotation
+- **Multiple Capture Modes**: Full screen capture or precise rectangle selection
+- **Interactive Region Selection**: Click and drag interface for selecting specific areas
 - **Modern Desktop Integration**: Native Wayland support via xdg-desktop-portal with X11 fallback
 - **Essential Annotation Tools**:
   - ✏️ Pencil tool for freehand drawing
@@ -72,13 +74,24 @@ cargo install --path .
 ### Basic Workflow
 
 1. **Launch Flint**: Run `flint` from terminal or application menu
-2. **Click "Take Screenshot"**: A capture interface will appear with a button to initiate screenshot
-3. **Select Capture Area**: On Wayland, the system portal will appear for region/window selection; on X11, full screen is captured
-4. **Annotate**: The editor opens automatically with your screenshot loaded - use the toolbar to select tools and draw
-5. **Export**: Save to file or copy to clipboard using the toolbar buttons
+2. **Choose Capture Mode**: 
+   - Click "📷 Take Full Screenshot" for entire screen capture
+   - Click "🔲 Select Rectangle Area" to select a specific region
+3. **For Rectangle Selection**: Click and drag to select area, press Escape to cancel
+4. **Screenshot Capture**: On Wayland, the system portal may appear; on X11, full screen is captured and cropped if needed
+5. **Annotate**: The editor opens automatically with your screenshot loaded - use the toolbar to select tools and draw
+6. **Export**: Save to file or copy to clipboard using the toolbar buttons
 
 ### Keyboard Shortcuts
 
+#### In Capture Interface:
+- `Enter` or `Space`: Take full screenshot
+- `Escape`: Quit application
+
+#### In Rectangle Selection:
+- `Escape`: Cancel selection and return to main interface
+
+#### In Editor:
 - `Escape`: Cancel current drawing stroke
 - `Ctrl+Z`: Undo last action (planned for future versions)
 
@@ -115,7 +128,7 @@ Flint uses the xdg-desktop-portal for secure, native screenshot capture on Wayla
 - Support for region, window, and full-screen capture
 
 ### X11 (Fallback)
-On X11 systems, Flint falls back to direct screen capture. Note that V1.0 only supports full-screen capture in X11 mode.
+On X11 systems, Flint falls back to direct screen capture. Rectangle selection works by capturing the full screen and then cropping to the selected region.
 
 ## Troubleshooting
 

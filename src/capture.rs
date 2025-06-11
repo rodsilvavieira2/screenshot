@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
 use log::{info, warn, debug};
 use std::path::PathBuf;
+use image::GenericImageView;
 
 pub struct ScreenshotCapture {
     pub use_portal: bool,
@@ -51,6 +52,15 @@ impl ScreenshotCapture {
         info!("Taking screenshot via X11 fallback");
         self.take_screenshot_x11_blocking()
             .map_err(|e| anyhow!("Screenshot capture failed: {}. Please ensure you're running in a graphical environment with proper permissions.", e))
+    }
+
+    pub fn take_screenshot_region_blocking(&self, x: i32, y: i32, width: i32, height: i32) -> Result<Vec<u8>> {
+        info!("Starting region screenshot capture process: {}x{} at ({}, {})", width, height, x, y);
+        
+        // For now, we'll capture full screen and crop the region
+        // In a full implementation, we could use X11 region capture or portal region selection
+        let full_screenshot = self.take_screenshot_blocking()?;
+        self.crop_image_region(&full_screenshot, x, y, width, height)
     }
 
     fn take_screenshot_portal_blocking(&self) -> Result<Vec<u8>> {
@@ -115,6 +125,40 @@ impl ScreenshotCapture {
         }
         
         info!("Screenshot converted to PNG, {} bytes", buffer.len());
+        Ok(buffer)
+    }
+
+    fn crop_image_region(&self, image_data: &[u8], x: i32, y: i32, width: i32, height: i32) -> Result<Vec<u8>> {
+        info!("Cropping image region: {}x{} at ({}, {})", width, height, x, y);
+        
+        // Load the image from bytes
+        let image = image::load_from_memory(image_data)
+            .map_err(|e| anyhow!("Failed to load image for cropping: {}", e))?;
+        
+        let (img_width, img_height) = image.dimensions();
+        info!("Original image dimensions: {}x{}", img_width, img_height);
+        
+        // Validate crop bounds
+        let crop_x = x.max(0) as u32;
+        let crop_y = y.max(0) as u32;
+        let crop_width = width.min(img_width as i32 - x).max(1) as u32;
+        let crop_height = height.min(img_height as i32 - y).max(1) as u32;
+        
+        if crop_x >= img_width || crop_y >= img_height {
+            return Err(anyhow!("Crop region is outside image bounds"));
+        }
+        
+        info!("Adjusted crop region: {}x{} at ({}, {})", crop_width, crop_height, crop_x, crop_y);
+        
+        // Crop the image
+        let cropped = image.crop_imm(crop_x, crop_y, crop_width, crop_height);
+        
+        // Convert back to PNG bytes
+        let mut buffer = Vec::new();
+        cropped.write_to(&mut std::io::Cursor::new(&mut buffer), image::ImageOutputFormat::Png)
+            .map_err(|e| anyhow!("Failed to convert cropped image to PNG: {}", e))?;
+        
+        info!("Cropped image converted to PNG, {} bytes", buffer.len());
         Ok(buffer)
     }
 
