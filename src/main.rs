@@ -198,7 +198,7 @@ fn start_screenshot_capture(app: Application, window: ApplicationWindow, is_rect
 }
 
 fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) {
-    // Create fullscreen overlay window for rectangle selection
+    // Create fullscreen overlay window for rectangle selection  
     let overlay_window = ApplicationWindow::builder()
         .application(&app)
         .title("Select Rectangle Area")
@@ -207,9 +207,9 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
         .decorated(false)
         .build();
     
-    // Make window fullscreen and transparent
+    // Make window fullscreen with low opacity to see through
     overlay_window.fullscreen();
-    overlay_window.set_opacity(0.3);
+    overlay_window.set_opacity(0.9);
     
     // Create drawing area for selection
     let drawing_area = DrawingArea::new();
@@ -221,14 +221,23 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
     let selection_end = Rc::new(RefCell::new(None::<(f64, f64)>));
     let is_selecting = Rc::new(RefCell::new(false));
     
-    // Draw selection rectangle
+    // Draw selection rectangle with light overlay
     let selection_start_draw = selection_start.clone();
     let selection_end_draw = selection_end.clone();
+    
     drawing_area.set_draw_func(move |_, ctx, width, height| {
-        // Semi-transparent dark overlay
-        ctx.set_source_rgba(0.0, 0.0, 0.0, 0.5);
+        // Draw very light semi-transparent overlay
+        ctx.set_source_rgba(0.0, 0.0, 0.0, 0.15);
         ctx.rectangle(0.0, 0.0, width as f64, height as f64);
         ctx.fill().unwrap();
+        
+        // Draw instruction text at the top
+        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.9);
+        ctx.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
+        ctx.set_font_size(24.0);
+        let instruction_text = "Click and drag to select rectangle area • Press Escape to cancel";
+        ctx.move_to(20.0, 40.0);
+        ctx.show_text(instruction_text).unwrap();
         
         // Draw selection rectangle if exists
         if let (Some(start), Some(end)) = (*selection_start_draw.borrow(), *selection_end_draw.borrow()) {
@@ -237,17 +246,33 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
             let w = (end.0 - start.0).abs();
             let h = (end.1 - start.1).abs();
             
-            // Clear selection area
+            // Clear selection area to make it more transparent
             ctx.set_operator(cairo::Operator::Clear);
             ctx.rectangle(x, y, w, h);
             ctx.fill().unwrap();
             
-            // Draw selection border
+            // Reset operator and draw selection border
             ctx.set_operator(cairo::Operator::Over);
+            
+            // Draw thick red border
             ctx.set_source_rgb(1.0, 0.0, 0.0);
-            ctx.set_line_width(2.0);
+            ctx.set_line_width(4.0);
             ctx.rectangle(x, y, w, h);
             ctx.stroke().unwrap();
+            
+            // Add inner white border for better visibility
+            ctx.set_source_rgb(1.0, 1.0, 1.0);
+            ctx.set_line_width(2.0);
+            ctx.rectangle(x + 1.0, y + 1.0, w - 2.0, h - 2.0);
+            ctx.stroke().unwrap();
+            
+            // Draw dimension text
+            let text = format!("{}×{}", w as i32, h as i32);
+            ctx.set_source_rgb(1.0, 1.0, 1.0);
+            ctx.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Normal);
+            ctx.set_font_size(16.0);
+            ctx.move_to(x + 5.0, y + 20.0);
+            ctx.show_text(&text).unwrap();
         }
     });
     
