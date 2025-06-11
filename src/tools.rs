@@ -1,5 +1,6 @@
 use cairo::{Context, LineCap, LineJoin};
 use gdk4::RGBA;
+use log::info;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ToolType {
@@ -246,8 +247,11 @@ impl AnnotationTools {
     }
 
     pub fn clear_all(&mut self) {
+        let stroke_count = self.strokes.len();
+        info!("Clearing {} annotations", stroke_count);
         self.strokes.clear();
         self.current_stroke = None;
+        info!("All annotations cleared");
     }
 
     pub fn draw_all(&self, ctx: &Context) {

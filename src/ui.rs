@@ -16,6 +16,9 @@ pub struct Toolbar {
     color_combo: ComboBoxText,
     thickness_scale: Scale,
     current_tool: Rc<RefCell<ToolType>>,
+    save_button: Button,
+    copy_button: Button,
+    clear_button: Button,
 }
 
 impl Toolbar {
@@ -85,6 +88,9 @@ impl Toolbar {
             color_combo,
             thickness_scale,
             current_tool,
+            save_button,
+            copy_button,
+            clear_button,
         }
     }
 
@@ -286,8 +292,32 @@ impl Toolbar {
         });
     }
 
-    // Note: Button connection methods removed for V1.0 simplicity
-    // These would be implemented with proper widget traversal in a full version
+    pub fn connect_save_clicked<F>(&self, callback: F)
+    where
+        F: Fn() + 'static,
+    {
+        self.save_button.connect_clicked(move |_| {
+            callback();
+        });
+    }
+
+    pub fn connect_copy_clicked<F>(&self, callback: F)
+    where
+        F: Fn() + 'static,
+    {
+        self.copy_button.connect_clicked(move |_| {
+            callback();
+        });
+    }
+
+    pub fn connect_clear_clicked<F>(&self, callback: F)
+    where
+        F: Fn() + 'static,
+    {
+        self.clear_button.connect_clicked(move |_| {
+            callback();
+        });
+    }
 
     pub fn get_widget(&self) -> &Box {
         &self.widget
