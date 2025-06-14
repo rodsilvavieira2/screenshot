@@ -383,23 +383,25 @@ pub fn load_css() {
 
         /* Editor Interface Styling */
         .toolbar {
-            background-color: @theme_bg_color;
-            border-bottom: 1px solid @borders;
+            background-color: #2c3136; /* Dark theme toolbar */
+            border-bottom: 1px solid #3c4043;
             padding: 6px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            color: #e8eaed; /* Light text for dark background */
         }
 
         .statusbar {
-            background-color: @theme_bg_color;
-            border-top: 1px solid @borders;
+            background-color: #2c3136; /* Match toolbar */
+            border-top: 1px solid #3c4043;
             padding: 3px;
             font-size: 0.9em;
             font-family: monospace;
+            color: #e8eaed; /* Light text for dark background */
         }
 
         .drawing-area {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
+            background-color: #262D35; /* Dark blue-gray to match the Cairo background */
+            border: 1px solid #3c4043; /* Darker border for better contrast */
         }
 
         .tool-button {
@@ -409,11 +411,15 @@ pub fn load_css() {
             margin: 2px;
             border-radius: 6px;
             font-size: 16px;
+            background-color: #3c4043; /* Dark button background */
+            color: #e8eaed; /* Light text */
+            border: 1px solid #5f6368;
         }
 
         .tool-button:checked {
-            background: @accent_color;
-            color: @accent_fg_color;
+            background: #1976d2; /* Blue accent for selected tool */
+            color: white;
+            border: 1px solid #1565c0;
         }
 
         button {
@@ -421,10 +427,14 @@ pub fn load_css() {
             padding: 6px 12px;
             border-radius: 6px;
             transition: all 150ms ease;
+            background-color: #3c4043; /* Dark theme button */
+            color: #e8eaed; /* Light text */
+            border: 1px solid #5f6368;
         }
 
         button:hover {
             transform: translateY(-1px);
+            background-color: #4c5257; /* Lighter on hover */
         }
 
         .destructive-action {
@@ -476,6 +486,15 @@ pub fn load_css() {
 
         .selection-overlay, .selection-overlay * {
             background: rgba(0, 0, 0, 0);
+        }
+
+        /* Editor Window Styling */
+        .editor-window {
+            background-color: #1e2124; /* Dark background for the window */
+        }
+
+        .editor-main-box {
+            background-color: #2c3136; /* Slightly lighter for the main container */
         }
     "#;
 

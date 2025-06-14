@@ -63,6 +63,9 @@ impl AnnotationEditor {
             .resizable(true)
             .build();
 
+        // Add CSS class for styling
+        window.add_css_class("editor-window");
+
         // Load the screenshot image
         let screenshot_surface = Rc::new(RefCell::new(None));
         let (image_width, image_height) =
@@ -74,6 +77,7 @@ impl AnnotationEditor {
 
         // Create UI components
         let main_box = Box::new(Orientation::Vertical, 0);
+        main_box.add_css_class("editor-main-box");
 
         // Create drawing area first so we can pass it to toolbar
         let drawing_area = DrawingArea::new();
@@ -300,9 +304,23 @@ impl AnnotationEditor {
         drawing_area.set_draw_func(move |_area, ctx, width, height| {
             debug!("Drawing callback: area={}x{}", width, height);
 
-            // Clear the background with a light gray
-            ctx.set_source_rgb(0.95, 0.95, 0.95);
+            // Create a subtle gradient background for a modern look
+            let gradient = cairo::LinearGradient::new(0.0, 0.0, 0.0, height as f64);
+            gradient.add_color_stop_rgb(0.0, 0.15, 0.17, 0.21); // Top: #262D35
+            gradient.add_color_stop_rgb(1.0, 0.12, 0.14, 0.18); // Bottom: slightly darker
+            ctx.set_source(&gradient).unwrap();
             ctx.paint().unwrap();
+
+            // Add a subtle texture pattern
+            ctx.save().unwrap();
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.01); // Very subtle white dots
+            for x in (0..width).step_by(20) {
+                for y in (0..height).step_by(20) {
+                    ctx.arc(x as f64, y as f64, 0.5, 0.0, 2.0 * std::f64::consts::PI);
+                    ctx.fill().unwrap();
+                }
+            }
+            ctx.restore().unwrap();
 
             // Draw the screenshot first
             if let Some(ref surface) = *screenshot_surface_draw.borrow() {
@@ -337,13 +355,13 @@ impl AnnotationEditor {
                 );
             } else {
                 warn!("No screenshot surface available to draw");
-                // Draw a placeholder
-                ctx.set_source_rgb(0.8, 0.8, 0.8);
+                // Draw a placeholder with subtle dark background
+                ctx.set_source_rgb(0.18, 0.20, 0.24); // Slightly lighter than main background
                 ctx.rectangle(0.0, 0.0, width as f64, height as f64);
                 ctx.fill().unwrap();
 
-                // Draw text indicating no image
-                ctx.set_source_rgb(0.3, 0.3, 0.3);
+                // Draw text indicating no image with light text
+                ctx.set_source_rgb(0.7, 0.7, 0.7); // Light gray text for dark theme
                 ctx.move_to(20.0, height as f64 / 2.0);
                 ctx.show_text("No screenshot loaded").unwrap();
             }
