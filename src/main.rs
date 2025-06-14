@@ -200,15 +200,17 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
     // Hide parent window first
     parent_window.set_visible(false);
 
-    // Capture the current screen state for preview
-    let background_image = capture_background_for_preview();
+    // Capture the actual current screen state for preview
+    // This will show the real desktop state when user clicks rectangle selection
+    let screen_info = get_screen_info_without_capture();
+    let preview_surface = capture_current_screen_for_preview(screen_info.0, screen_info.1);
 
     // Create fullscreen overlay window for rectangle selection
     let overlay_window = ApplicationWindow::builder()
         .application(&app)
         .title("Select Rectangle Area")
-        .default_width(1920)
-        .default_height(1080)
+        .default_width(screen_info.0)
+        .default_height(screen_info.1)
         .decorated(false)
         .build();
 
@@ -229,33 +231,22 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
 
     let selection_start_draw = selection_start.clone();
     let selection_end_draw = selection_end.clone();
-    let background_image_draw = background_image.clone();
 
     drawing_area.set_draw_func(move |_, ctx, width, height| {
-        // Draw the background screenshot if available
-        if let Some(ref bg_surface) = background_image_draw {
-            // Scale the background to fit the screen
-            let bg_width = bg_surface.width() as f64;
-            let bg_height = bg_surface.height() as f64;
-            let scale_x = width as f64 / bg_width;
-            let scale_y = height as f64 / bg_height;
+        // Draw the preview pattern as background
+        ctx.save().unwrap();
+        ctx.scale(
+            width as f64 / screen_info.0 as f64,
+            height as f64 / screen_info.1 as f64,
+        );
+        ctx.set_source_surface(&preview_surface, 0.0, 0.0).unwrap();
+        ctx.paint().unwrap();
+        ctx.restore().unwrap();
 
-            ctx.save().unwrap();
-            ctx.scale(scale_x, scale_y);
-            ctx.set_source_surface(bg_surface, 0.0, 0.0).unwrap();
-            ctx.paint().unwrap();
-            ctx.restore().unwrap();
-
-            // Add a subtle dark overlay to indicate selection mode
-            ctx.set_source_rgba(0.0, 0.0, 0.0, 0.3);
-            ctx.rectangle(0.0, 0.0, width as f64, height as f64);
-            ctx.fill().unwrap();
-        } else {
-            // Fallback: Draw semi-transparent dark background for Wayland
-            ctx.set_source_rgba(0.0, 0.0, 0.0, 0.7);
-            ctx.rectangle(0.0, 0.0, width as f64, height as f64);
-            ctx.fill().unwrap();
-        }
+        // Add a subtle dark overlay to indicate selection mode
+        ctx.set_source_rgba(0.0, 0.0, 0.0, 0.2);
+        ctx.rectangle(0.0, 0.0, width as f64, height as f64);
+        ctx.fill().unwrap();
 
         // Add subtle grid to help with positioning
         ctx.set_source_rgba(0.3, 0.3, 0.3, 0.3);
@@ -278,7 +269,7 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
         ctx.stroke().unwrap();
 
         // Draw instruction text with background for visibility
-        let instruction_text = "Click and drag to select rectangle area • Press Escape to cancel";
+        let instruction_text = "Current desktop view - Click and drag to select rectangle area • Press Escape to cancel";
         ctx.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
         ctx.set_font_size(16.0);
 
@@ -305,27 +296,19 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
             let w = (end.0 - start.0).abs();
             let h = (end.1 - start.1).abs();
 
-            // Clear the selected area to show the original content more clearly
-            if let Some(ref bg_surface) = background_image_draw {
-                ctx.save().unwrap();
-                ctx.rectangle(x, y, w, h);
-                ctx.clip();
+            // Clear the selected area to show a brighter preview
+            ctx.save().unwrap();
+            ctx.rectangle(x, y, w, h);
+            ctx.clip();
 
-                let bg_width = bg_surface.width() as f64;
-                let bg_height = bg_surface.height() as f64;
-                let scale_x = width as f64 / bg_width;
-                let scale_y = height as f64 / bg_height;
-
-                ctx.scale(scale_x, scale_y);
-                ctx.set_source_surface(bg_surface, 0.0, 0.0).unwrap();
-                ctx.paint().unwrap();
-                ctx.restore().unwrap();
-            } else {
-                // Fallback: Make the selected area brighter
-                ctx.set_source_rgba(1.0, 1.0, 1.0, 0.2);
-                ctx.rectangle(x, y, w, h);
-                ctx.fill().unwrap();
-            }
+            // Redraw the preview pattern at full brightness for selected area
+            ctx.scale(
+                width as f64 / screen_info.0 as f64,
+                height as f64 / screen_info.1 as f64,
+            );
+            ctx.set_source_surface(&preview_surface, 0.0, 0.0).unwrap();
+            ctx.paint().unwrap();
+            ctx.restore().unwrap();
 
             // Draw thick selection border with animated effect
             ctx.set_source_rgb(0.2, 0.6, 1.0); // Blue selection color
@@ -609,20 +592,23 @@ fn show_error_dialog(parent: &ApplicationWindow, message: &str) {
     dialog.present();
 }
 
-fn capture_background_for_preview() -> Option<cairo::ImageSurface> {
+fn capture_current_screen_for_preview(width: i32, height: i32) -> cairo::ImageSurface {
+    info!("Attempting to capture current screen state for preview");
+
     // Brief delay to ensure window transitions are complete
-    std::thread::sleep(std::time::Duration::from_millis(200));
+    std::thread::sleep(std::time::Duration::from_millis(300));
 
     let capture = ScreenshotCapture::new();
 
     match capture.take_screenshot_blocking() {
         Ok(png_data) => {
+            info!("Successfully captured screen for preview");
             // Load PNG data into an image
             match image::load_from_memory(&png_data) {
                 Ok(img) => {
                     // Convert to RGBA format
                     let rgba_img = img.to_rgba8();
-                    let (width, height) = rgba_img.dimensions();
+                    let (img_width, img_height) = rgba_img.dimensions();
                     let pixels = rgba_img.into_raw();
 
                     // Convert RGBA to BGRA for Cairo (Cairo expects BGRA on little-endian systems)
@@ -636,36 +622,134 @@ fn capture_background_for_preview() -> Option<cairo::ImageSurface> {
                         }
                     }
 
-                    // Create Cairo ImageSurface
+                    // Create Cairo ImageSurface with actual screen capture
                     match cairo::ImageSurface::create_for_data(
                         bgra_pixels,
                         cairo::Format::ARgb32,
-                        width as i32,
-                        height as i32,
-                        width as i32 * 4,
+                        img_width as i32,
+                        img_height as i32,
+                        img_width as i32 * 4,
                     ) {
                         Ok(surface) => {
                             info!(
-                                "Background preview captured successfully: {}x{}",
-                                width, height
+                                "Created Cairo surface from screen capture: {}x{}",
+                                img_width, img_height
                             );
-                            Some(surface)
+                            return surface;
                         }
                         Err(e) => {
-                            log::warn!("Failed to create Cairo surface: {}", e);
-                            None
+                            log::warn!("Failed to create Cairo surface from capture: {}", e);
                         }
                     }
                 }
                 Err(e) => {
-                    log::warn!("Failed to load background image: {}", e);
-                    None
+                    log::warn!("Failed to load captured image: {}", e);
                 }
             }
         }
         Err(e) => {
-            log::warn!("Failed to capture background for preview: {}", e);
-            None
+            log::warn!("Failed to capture screen for preview: {}", e);
         }
     }
+
+    // Fallback to preview pattern if capture fails
+    info!("Falling back to preview pattern");
+    create_screen_preview_pattern(width, height)
+}
+
+fn get_screen_info_without_capture() -> (i32, i32) {
+    // Get screen dimensions using GDK without actually capturing
+    let display = gdk4::Display::default().expect("Failed to get default display");
+    let monitors = display.monitors();
+
+    if monitors.n_items() > 0 {
+        let monitor = monitors
+            .item(0)
+            .unwrap()
+            .downcast::<gdk4::Monitor>()
+            .unwrap();
+        let geometry = monitor.geometry();
+        (geometry.width(), geometry.height())
+    } else {
+        // Fallback to common screen resolution
+        (1920, 1080)
+    }
+}
+
+fn create_screen_preview_pattern(width: i32, height: i32) -> cairo::ImageSurface {
+    // Create a visual pattern that represents the desktop without actually capturing it
+    let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, width, height)
+        .expect("Failed to create preview surface");
+    let ctx = cairo::Context::new(&surface).expect("Failed to create cairo context");
+
+    // Create a gradient background that simulates a desktop
+    let gradient = cairo::LinearGradient::new(0.0, 0.0, width as f64, height as f64);
+    gradient.add_color_stop_rgba(0.0, 0.2, 0.3, 0.5, 1.0); // Blue-ish top
+    gradient.add_color_stop_rgba(1.0, 0.1, 0.2, 0.4, 1.0); // Darker bottom
+
+    ctx.set_source(&gradient).unwrap();
+    ctx.rectangle(0.0, 0.0, width as f64, height as f64);
+    ctx.fill().unwrap();
+
+    // Add some visual elements to simulate a desktop
+    // Taskbar simulation
+    ctx.set_source_rgba(0.0, 0.0, 0.0, 0.8);
+    ctx.rectangle(0.0, height as f64 - 48.0, width as f64, 48.0);
+    ctx.fill().unwrap();
+
+    // Simulate some desktop icons/windows
+    let window_colors = [
+        (0.9, 0.9, 0.9, 0.9), // Light window
+        (0.8, 0.8, 0.9, 0.9), // Slightly blue window
+        (0.9, 0.8, 0.8, 0.9), // Slightly red window
+    ];
+
+    for (i, &(r, g, b, a)) in window_colors.iter().enumerate() {
+        let x = 50.0 + (i as f64 * 220.0);
+        let y = 50.0 + (i as f64 * 80.0);
+        let w = 200.0;
+        let h = 150.0;
+
+        // Window shadow
+        ctx.set_source_rgba(0.0, 0.0, 0.0, 0.3);
+        ctx.rectangle(x + 5.0, y + 5.0, w, h);
+        ctx.fill().unwrap();
+
+        // Window
+        ctx.set_source_rgba(r, g, b, a);
+        ctx.rectangle(x, y, w, h);
+        ctx.fill().unwrap();
+
+        // Window title bar
+        ctx.set_source_rgba(r * 0.8, g * 0.8, b * 0.8, a);
+        ctx.rectangle(x, y, w, 30.0);
+        ctx.fill().unwrap();
+    }
+
+    // Add text indicating this is a preview
+    ctx.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
+    ctx.set_font_size(24.0);
+    ctx.set_source_rgba(1.0, 1.0, 1.0, 0.7);
+
+    let preview_text = "Desktop Preview - Screen capture unavailable";
+    let text_extents = ctx.text_extents(preview_text).unwrap();
+    let text_x = (width as f64 - text_extents.width()) / 2.0;
+    let text_y = height as f64 / 2.0;
+
+    // Text background
+    ctx.set_source_rgba(0.0, 0.0, 0.0, 0.6);
+    ctx.rectangle(
+        text_x - 20.0,
+        text_y - 30.0,
+        text_extents.width() + 40.0,
+        50.0,
+    );
+    ctx.fill().unwrap();
+
+    // Text
+    ctx.set_source_rgba(1.0, 1.0, 1.0, 0.9);
+    ctx.move_to(text_x, text_y);
+    ctx.show_text(preview_text).unwrap();
+
+    surface
 }
