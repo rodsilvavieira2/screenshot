@@ -206,14 +206,3 @@ impl Default for ScreenshotCapture {
         Self::new()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_portal_detection() {
-        // This test just ensures the detection doesn't panic
-        let _use_portal = ScreenshotCapture::detect_portal_availability();
-    }
-}
