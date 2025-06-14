@@ -3,6 +3,7 @@ use cairo;
 use gdk4;
 use gtk4::prelude::*;
 use gtk4::{glib, Application, ApplicationWindow, Box, Button, DrawingArea, Label, Orientation};
+use image::GenericImageView;
 use log::{error, info};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -204,7 +205,7 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
     glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
         // Now capture the actual current screen state for preview (without the capture UI)
         let screen_info = get_screen_info_without_capture();
-        let preview_surface = capture_current_screen_for_preview(screen_info.0, screen_info.1);
+        let (preview_surface, original_png_data) = capture_current_screen_for_preview_with_data(screen_info.0, screen_info.1);
 
         // Create fullscreen overlay window for rectangle selection
         let overlay_window = ApplicationWindow::builder()
@@ -405,6 +406,7 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
         let overlay_window_release = overlay_window.clone();
         let app_release = app.clone();
         let parent_window_release = parent_window.clone();
+        let original_png_data_release = original_png_data.clone();
 
         gesture_click.connect_released(move |_, _, x, y| {
             if *is_selecting_release.borrow() {
@@ -423,13 +425,39 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
 
                     if w > 10 && h > 10 {
                         // Minimum size check
-                        let rect = Some((x, y, w, h));
                         overlay_window_release.close();
-                        proceed_with_screenshot(
-                            app_release.clone(),
-                            parent_window_release.clone(),
-                            rect,
-                        );
+                        
+                        // Use the stored PNG data and crop it directly
+                        if let Some(ref png_data) = original_png_data_release {
+                            match crop_png_data_direct(png_data, x, y, w, h) {
+                                Ok(cropped_png) => {
+                                    proceed_with_cropped_screenshot(
+                                        app_release.clone(),
+                                        parent_window_release.clone(),
+                                        cropped_png,
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to crop PNG data: {}", e);
+                                    // Fallback to taking a new screenshot
+                                    let rect = Some((x, y, w, h));
+                                    proceed_with_screenshot(
+                                        app_release.clone(),
+                                        parent_window_release.clone(),
+                                        rect,
+                                    );
+                                }
+                            }
+                        } else {
+                            error!("No PNG data available for cropping, falling back to new screenshot");
+                            // Fallback to taking a new screenshot
+                            let rect = Some((x, y, w, h));
+                            proceed_with_screenshot(
+                                app_release.clone(),
+                                parent_window_release.clone(),
+                                rect,
+                            );
+                        }
                     } else {
                         overlay_window_release.close();
                         parent_window_release.set_visible(true);
@@ -596,8 +624,8 @@ fn show_error_dialog(parent: &ApplicationWindow, message: &str) {
     dialog.present();
 }
 
-fn capture_current_screen_for_preview(width: i32, height: i32) -> cairo::ImageSurface {
-    info!("Attempting to capture current screen state for preview");
+fn capture_current_screen_for_preview_with_data(width: i32, height: i32) -> (cairo::ImageSurface, Option<Vec<u8>>) {
+    info!("Attempting to capture current screen state for preview with original data");
 
     // Longer delay to ensure capture UI window is completely hidden
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -639,7 +667,7 @@ fn capture_current_screen_for_preview(width: i32, height: i32) -> cairo::ImageSu
                                 "Created Cairo surface from screen capture: {}x{}",
                                 img_width, img_height
                             );
-                            return surface;
+                            return (surface, Some(png_data));
                         }
                         Err(e) => {
                             log::warn!("Failed to create Cairo surface from capture: {}", e);
@@ -658,7 +686,7 @@ fn capture_current_screen_for_preview(width: i32, height: i32) -> cairo::ImageSu
 
     // Fallback to preview pattern if capture fails
     info!("Falling back to preview pattern");
-    create_screen_preview_pattern(width, height)
+    (create_screen_preview_pattern(width, height), None)
 }
 
 fn get_screen_info_without_capture() -> (i32, i32) {
@@ -756,4 +784,64 @@ fn create_screen_preview_pattern(width: i32, height: i32) -> cairo::ImageSurface
     ctx.show_text(preview_text).unwrap();
 
     surface
+}
+
+fn crop_png_data_direct(png_data: &[u8], x: i32, y: i32, width: i32, height: i32) -> Result<Vec<u8>> {
+    info!("Cropping PNG data directly: {}x{} at ({}, {})", width, height, x, y);
+    
+    // Load the image from PNG bytes
+    let image = image::load_from_memory(png_data)
+        .map_err(|e| anyhow::anyhow!("Failed to load image for cropping: {}", e))?;
+
+    let (img_width, img_height) = image.dimensions();
+    info!("Original image dimensions: {}x{}", img_width, img_height);
+
+    // Validate crop bounds
+    let crop_x = x.max(0) as u32;
+    let crop_y = y.max(0) as u32;
+    let crop_width = width.min(img_width as i32 - x).max(1) as u32;
+    let crop_height = height.min(img_height as i32 - y).max(1) as u32;
+
+    if crop_x >= img_width || crop_y >= img_height {
+        return Err(anyhow::anyhow!("Crop region is outside image bounds"));
+    }
+
+    info!(
+        "Adjusted crop region: {}x{} at ({}, {})",
+        crop_width, crop_height, crop_x, crop_y
+    );
+
+    // Crop the image
+    let cropped = image.crop_imm(crop_x, crop_y, crop_width, crop_height);
+
+    // Convert back to PNG bytes
+    let mut buffer = Vec::new();
+    cropped
+        .write_to(
+            &mut std::io::Cursor::new(&mut buffer),
+            image::ImageOutputFormat::Png,
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to convert cropped image to PNG: {}", e))?;
+
+    info!("Cropped image converted to PNG, {} bytes", buffer.len());
+    Ok(buffer)
+}
+
+fn proceed_with_cropped_screenshot(app: Application, window: ApplicationWindow, png_data: Vec<u8>) {
+    info!("Opening editor with cropped screenshot ({} bytes)", png_data.len());
+
+    // Close the capture window
+    window.close();
+
+    // Create and show the annotation editor directly
+    match AnnotationEditor::new(&app, png_data) {
+        Ok(editor) => {
+            info!("Editor created successfully");
+            editor.show();
+        }
+        Err(e) => {
+            error!("Failed to create editor: {}", e);
+            show_error_dialog(&window, &format!("Failed to open editor: {}", e));
+        }
+    }
 }
