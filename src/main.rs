@@ -200,6 +200,9 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
     // Hide parent window first
     parent_window.set_visible(false);
 
+    // Capture the current screen state for preview
+    let background_image = capture_background_for_preview();
+
     // Create fullscreen overlay window for rectangle selection
     let overlay_window = ApplicationWindow::builder()
         .application(&app)
@@ -226,12 +229,33 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
 
     let selection_start_draw = selection_start.clone();
     let selection_end_draw = selection_end.clone();
+    let background_image_draw = background_image.clone();
 
     drawing_area.set_draw_func(move |_, ctx, width, height| {
-        // Draw semi-transparent dark background for Wayland
-        ctx.set_source_rgba(0.0, 0.0, 0.0, 0.7);
-        ctx.rectangle(0.0, 0.0, width as f64, height as f64);
-        ctx.fill().unwrap();
+        // Draw the background screenshot if available
+        if let Some(ref bg_surface) = background_image_draw {
+            // Scale the background to fit the screen
+            let bg_width = bg_surface.width() as f64;
+            let bg_height = bg_surface.height() as f64;
+            let scale_x = width as f64 / bg_width;
+            let scale_y = height as f64 / bg_height;
+
+            ctx.save().unwrap();
+            ctx.scale(scale_x, scale_y);
+            ctx.set_source_surface(bg_surface, 0.0, 0.0).unwrap();
+            ctx.paint().unwrap();
+            ctx.restore().unwrap();
+
+            // Add a subtle dark overlay to indicate selection mode
+            ctx.set_source_rgba(0.0, 0.0, 0.0, 0.3);
+            ctx.rectangle(0.0, 0.0, width as f64, height as f64);
+            ctx.fill().unwrap();
+        } else {
+            // Fallback: Draw semi-transparent dark background for Wayland
+            ctx.set_source_rgba(0.0, 0.0, 0.0, 0.7);
+            ctx.rectangle(0.0, 0.0, width as f64, height as f64);
+            ctx.fill().unwrap();
+        }
 
         // Add subtle grid to help with positioning
         ctx.set_source_rgba(0.3, 0.3, 0.3, 0.3);
@@ -281,31 +305,98 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
             let w = (end.0 - start.0).abs();
             let h = (end.1 - start.1).abs();
 
-            // Make the selected area bright to show what will be captured
-            ctx.save().unwrap();
-            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.3);
-            ctx.rectangle(x, y, w, h);
-            ctx.fill().unwrap();
-            ctx.restore().unwrap();
+            // Clear the selected area to show the original content more clearly
+            if let Some(ref bg_surface) = background_image_draw {
+                ctx.save().unwrap();
+                ctx.rectangle(x, y, w, h);
+                ctx.clip();
 
-            // Draw thick red border
-            ctx.set_source_rgb(1.0, 0.0, 0.0);
-            ctx.set_line_width(4.0);
+                let bg_width = bg_surface.width() as f64;
+                let bg_height = bg_surface.height() as f64;
+                let scale_x = width as f64 / bg_width;
+                let scale_y = height as f64 / bg_height;
+
+                ctx.scale(scale_x, scale_y);
+                ctx.set_source_surface(bg_surface, 0.0, 0.0).unwrap();
+                ctx.paint().unwrap();
+                ctx.restore().unwrap();
+            } else {
+                // Fallback: Make the selected area brighter
+                ctx.set_source_rgba(1.0, 1.0, 1.0, 0.2);
+                ctx.rectangle(x, y, w, h);
+                ctx.fill().unwrap();
+            }
+
+            // Draw thick selection border with animated effect
+            ctx.set_source_rgb(0.2, 0.6, 1.0); // Blue selection color
+            ctx.set_line_width(3.0);
             ctx.rectangle(x, y, w, h);
             ctx.stroke().unwrap();
 
             // Add inner white border for better visibility
             ctx.set_source_rgb(1.0, 1.0, 1.0);
-            ctx.set_line_width(2.0);
-            ctx.rectangle(x + 1.0, y + 1.0, w - 2.0, h - 2.0);
+            ctx.set_line_width(1.0);
+            ctx.rectangle(x + 1.5, y + 1.5, w - 3.0, h - 3.0);
             ctx.stroke().unwrap();
 
-            // Draw dimension text
+            // Draw corner handles to indicate interactive selection
+            let handle_size = 8.0;
+            ctx.set_source_rgb(0.2, 0.6, 1.0);
+            // Top-left corner
+            ctx.rectangle(
+                x - handle_size / 2.0,
+                y - handle_size / 2.0,
+                handle_size,
+                handle_size,
+            );
+            ctx.fill().unwrap();
+            // Top-right corner
+            ctx.rectangle(
+                x + w - handle_size / 2.0,
+                y - handle_size / 2.0,
+                handle_size,
+                handle_size,
+            );
+            ctx.fill().unwrap();
+            // Bottom-left corner
+            ctx.rectangle(
+                x - handle_size / 2.0,
+                y + h - handle_size / 2.0,
+                handle_size,
+                handle_size,
+            );
+            ctx.fill().unwrap();
+            // Bottom-right corner
+            ctx.rectangle(
+                x + w - handle_size / 2.0,
+                y + h - handle_size / 2.0,
+                handle_size,
+                handle_size,
+            );
+            ctx.fill().unwrap();
+
+            // Draw dimension text with background
             let text = format!("{}×{}", w as i32, h as i32);
-            ctx.set_source_rgb(1.0, 1.0, 1.0);
-            ctx.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Normal);
+            ctx.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
             ctx.set_font_size(16.0);
-            ctx.move_to(x + 5.0, y + 20.0);
+
+            let text_extents = ctx.text_extents(&text).unwrap();
+            let text_x = x + 8.0;
+            let text_y = y + 25.0;
+
+            // Draw text background
+            ctx.set_source_rgba(0.0, 0.0, 0.0, 0.8);
+            ctx.rectangle(
+                text_x - 4.0,
+                text_y - text_extents.height() - 4.0,
+                text_extents.width() + 8.0,
+                text_extents.height() + 8.0,
+            );
+            ctx.fill().unwrap();
+
+            // Draw text
+            ctx.set_source_rgb(1.0, 1.0, 1.0);
+            ctx.move_to(text_x, text_y);
             ctx.show_text(&text).unwrap();
         }
     });
@@ -516,4 +607,65 @@ fn show_error_dialog(parent: &ApplicationWindow, message: &str) {
     });
 
     dialog.present();
+}
+
+fn capture_background_for_preview() -> Option<cairo::ImageSurface> {
+    // Brief delay to ensure window transitions are complete
+    std::thread::sleep(std::time::Duration::from_millis(200));
+
+    let capture = ScreenshotCapture::new();
+
+    match capture.take_screenshot_blocking() {
+        Ok(png_data) => {
+            // Load PNG data into an image
+            match image::load_from_memory(&png_data) {
+                Ok(img) => {
+                    // Convert to RGBA format
+                    let rgba_img = img.to_rgba8();
+                    let (width, height) = rgba_img.dimensions();
+                    let pixels = rgba_img.into_raw();
+
+                    // Convert RGBA to BGRA for Cairo (Cairo expects BGRA on little-endian systems)
+                    let mut bgra_pixels = Vec::with_capacity(pixels.len());
+                    for chunk in pixels.chunks(4) {
+                        if chunk.len() == 4 {
+                            bgra_pixels.push(chunk[2]); // B
+                            bgra_pixels.push(chunk[1]); // G
+                            bgra_pixels.push(chunk[0]); // R
+                            bgra_pixels.push(chunk[3]); // A
+                        }
+                    }
+
+                    // Create Cairo ImageSurface
+                    match cairo::ImageSurface::create_for_data(
+                        bgra_pixels,
+                        cairo::Format::ARgb32,
+                        width as i32,
+                        height as i32,
+                        width as i32 * 4,
+                    ) {
+                        Ok(surface) => {
+                            info!(
+                                "Background preview captured successfully: {}x{}",
+                                width, height
+                            );
+                            Some(surface)
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to create Cairo surface: {}", e);
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to load background image: {}", e);
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            log::warn!("Failed to capture background for preview: {}", e);
+            None
+        }
+    }
 }
