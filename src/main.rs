@@ -197,111 +197,45 @@ fn start_screenshot_capture(app: Application, window: ApplicationWindow, is_rect
 }
 
 fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) {
-    // Hide parent window first
+    // Hide parent window first and ensure it's completely hidden
     parent_window.set_visible(false);
 
-    // Capture the actual current screen state for preview
-    // This will show the real desktop state when user clicks rectangle selection
-    let screen_info = get_screen_info_without_capture();
-    let preview_surface = capture_current_screen_for_preview(screen_info.0, screen_info.1);
+    // Additional delay to ensure the capture window is fully hidden before preview capture
+    glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+        // Now capture the actual current screen state for preview (without the capture UI)
+        let screen_info = get_screen_info_without_capture();
+        let preview_surface = capture_current_screen_for_preview(screen_info.0, screen_info.1);
 
-    // Create fullscreen overlay window for rectangle selection
-    let overlay_window = ApplicationWindow::builder()
-        .application(&app)
-        .title("Select Rectangle Area")
-        .default_width(screen_info.0)
-        .default_height(screen_info.1)
-        .decorated(false)
-        .build();
+        // Create fullscreen overlay window for rectangle selection
+        let overlay_window = ApplicationWindow::builder()
+            .application(&app)
+            .title("Select Rectangle Area")
+            .default_width(screen_info.0)
+            .default_height(screen_info.1)
+            .decorated(false)
+            .build();
 
-    // Configure for Wayland compatibility
-    overlay_window.set_modal(true);
-    overlay_window.set_resizable(false);
-    overlay_window.set_deletable(false);
+        // Configure for Wayland compatibility
+        overlay_window.set_modal(true);
+        overlay_window.set_resizable(false);
+        overlay_window.set_deletable(false);
 
-    overlay_window.fullscreen();
+        overlay_window.fullscreen();
 
-    let drawing_area = DrawingArea::new();
-    drawing_area.set_hexpand(true);
-    drawing_area.set_vexpand(true);
+        let drawing_area = DrawingArea::new();
+        drawing_area.set_hexpand(true);
+        drawing_area.set_vexpand(true);
 
-    let selection_start = Rc::new(RefCell::new(None::<(f64, f64)>));
-    let selection_end = Rc::new(RefCell::new(None::<(f64, f64)>));
-    let is_selecting = Rc::new(RefCell::new(false));
+        let selection_start = Rc::new(RefCell::new(None::<(f64, f64)>));
+        let selection_end = Rc::new(RefCell::new(None::<(f64, f64)>));
+        let is_selecting = Rc::new(RefCell::new(false));
 
-    let selection_start_draw = selection_start.clone();
-    let selection_end_draw = selection_end.clone();
+        let selection_start_draw = selection_start.clone();
+        let selection_end_draw = selection_end.clone();
 
-    drawing_area.set_draw_func(move |_, ctx, width, height| {
-        // Draw the preview pattern as background
-        ctx.save().unwrap();
-        ctx.scale(
-            width as f64 / screen_info.0 as f64,
-            height as f64 / screen_info.1 as f64,
-        );
-        ctx.set_source_surface(&preview_surface, 0.0, 0.0).unwrap();
-        ctx.paint().unwrap();
-        ctx.restore().unwrap();
-
-        // Add a subtle dark overlay to indicate selection mode
-        ctx.set_source_rgba(0.0, 0.0, 0.0, 0.2);
-        ctx.rectangle(0.0, 0.0, width as f64, height as f64);
-        ctx.fill().unwrap();
-
-        // Add subtle grid to help with positioning
-        ctx.set_source_rgba(0.3, 0.3, 0.3, 0.3);
-        ctx.set_line_width(1.0);
-
-        // Draw grid lines every 50 pixels
-        let mut x = 50.0;
-        while x < width as f64 {
-            ctx.move_to(x, 0.0);
-            ctx.line_to(x, height as f64);
-            x += 50.0;
-        }
-
-        let mut y = 50.0;
-        while y < height as f64 {
-            ctx.move_to(0.0, y);
-            ctx.line_to(width as f64, y);
-            y += 50.0;
-        }
-        ctx.stroke().unwrap();
-
-        // Draw instruction text with background for visibility
-        let instruction_text = "Current desktop view - Click and drag to select rectangle area • Press Escape to cancel";
-        ctx.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
-        ctx.set_font_size(16.0);
-
-        // Measure text width for proper background sizing
-        let text_extents = ctx.text_extents(instruction_text).unwrap();
-        let text_width = text_extents.width();
-        let text_height = text_extents.height();
-
-        // Draw background for text with rounded corners
-        ctx.set_source_rgba(0.0, 0.0, 0.0, 0.8);
-        ctx.rectangle(10.0, 10.0, text_width + 20.0, text_height + 15.0);
-        ctx.fill().unwrap();
-
-        // Draw the instruction text
-        ctx.set_source_rgba(1.0, 1.0, 1.0, 1.0);
-        ctx.move_to(20.0, 30.0);
-        ctx.show_text(instruction_text).unwrap();
-
-        if let (Some(start), Some(end)) =
-            (*selection_start_draw.borrow(), *selection_end_draw.borrow())
-        {
-            let x = start.0.min(end.0);
-            let y = start.1.min(end.1);
-            let w = (end.0 - start.0).abs();
-            let h = (end.1 - start.1).abs();
-
-            // Clear the selected area to show a brighter preview
+        drawing_area.set_draw_func(move |_, ctx, width, height| {
+            // Draw the preview pattern as background
             ctx.save().unwrap();
-            ctx.rectangle(x, y, w, h);
-            ctx.clip();
-
-            // Redraw the preview pattern at full brightness for selected area
             ctx.scale(
                 width as f64 / screen_info.0 as f64,
                 height as f64 / screen_info.1 as f64,
@@ -310,170 +244,240 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
             ctx.paint().unwrap();
             ctx.restore().unwrap();
 
-            // Draw thick selection border with animated effect
-            ctx.set_source_rgb(0.2, 0.6, 1.0); // Blue selection color
-            ctx.set_line_width(3.0);
-            ctx.rectangle(x, y, w, h);
-            ctx.stroke().unwrap();
+            // Add a subtle dark overlay to indicate selection mode
+            ctx.set_source_rgba(0.0, 0.0, 0.0, 0.2);
+            ctx.rectangle(0.0, 0.0, width as f64, height as f64);
+            ctx.fill().unwrap();
 
-            // Add inner white border for better visibility
-            ctx.set_source_rgb(1.0, 1.0, 1.0);
+            // Add subtle grid to help with positioning
+            ctx.set_source_rgba(0.3, 0.3, 0.3, 0.3);
             ctx.set_line_width(1.0);
-            ctx.rectangle(x + 1.5, y + 1.5, w - 3.0, h - 3.0);
+
+            // Draw grid lines every 50 pixels
+            let mut x = 50.0;
+            while x < width as f64 {
+                ctx.move_to(x, 0.0);
+                ctx.line_to(x, height as f64);
+                x += 50.0;
+            }
+
+            let mut y = 50.0;
+            while y < height as f64 {
+                ctx.move_to(0.0, y);
+                ctx.line_to(width as f64, y);
+                y += 50.0;
+            }
             ctx.stroke().unwrap();
 
-            // Draw corner handles to indicate interactive selection
-            let handle_size = 8.0;
-            ctx.set_source_rgb(0.2, 0.6, 1.0);
-            // Top-left corner
-            ctx.rectangle(
-                x - handle_size / 2.0,
-                y - handle_size / 2.0,
-                handle_size,
-                handle_size,
-            );
-            ctx.fill().unwrap();
-            // Top-right corner
-            ctx.rectangle(
-                x + w - handle_size / 2.0,
-                y - handle_size / 2.0,
-                handle_size,
-                handle_size,
-            );
-            ctx.fill().unwrap();
-            // Bottom-left corner
-            ctx.rectangle(
-                x - handle_size / 2.0,
-                y + h - handle_size / 2.0,
-                handle_size,
-                handle_size,
-            );
-            ctx.fill().unwrap();
-            // Bottom-right corner
-            ctx.rectangle(
-                x + w - handle_size / 2.0,
-                y + h - handle_size / 2.0,
-                handle_size,
-                handle_size,
-            );
-            ctx.fill().unwrap();
-
-            // Draw dimension text with background
-            let text = format!("{}×{}", w as i32, h as i32);
+            // Draw instruction text with background for visibility
+            let instruction_text = "Current desktop view - Click and drag to select rectangle area • Press Escape to cancel";
             ctx.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
             ctx.set_font_size(16.0);
 
-            let text_extents = ctx.text_extents(&text).unwrap();
-            let text_x = x + 8.0;
-            let text_y = y + 25.0;
+            // Measure text width for proper background sizing
+            let text_extents = ctx.text_extents(instruction_text).unwrap();
+            let text_width = text_extents.width();
+            let text_height = text_extents.height();
 
-            // Draw text background
+            // Draw background for text with rounded corners
             ctx.set_source_rgba(0.0, 0.0, 0.0, 0.8);
-            ctx.rectangle(
-                text_x - 4.0,
-                text_y - text_extents.height() - 4.0,
-                text_extents.width() + 8.0,
-                text_extents.height() + 8.0,
-            );
+            ctx.rectangle(10.0, 10.0, text_width + 20.0, text_height + 15.0);
             ctx.fill().unwrap();
 
-            // Draw text
-            ctx.set_source_rgb(1.0, 1.0, 1.0);
-            ctx.move_to(text_x, text_y);
-            ctx.show_text(&text).unwrap();
-        }
-    });
+            // Draw the instruction text
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+            ctx.move_to(20.0, 30.0);
+            ctx.show_text(instruction_text).unwrap();
 
-    // Mouse event handling
-    let gesture_click = gtk4::GestureClick::new();
-    let selection_start_click = selection_start.clone();
-    let selection_end_click = selection_end.clone();
-    let is_selecting_click = is_selecting.clone();
-    let drawing_area_click = drawing_area.clone();
+            if let (Some(start), Some(end)) =
+                (*selection_start_draw.borrow(), *selection_end_draw.borrow())
+            {
+                let x = start.0.min(end.0);
+                let y = start.1.min(end.1);
+                let w = (end.0 - start.0).abs();
+                let h = (end.1 - start.1).abs();
 
-    gesture_click.connect_pressed(move |_, _, x, y| {
-        *selection_start_click.borrow_mut() = Some((x, y));
-        *selection_end_click.borrow_mut() = Some((x, y));
-        *is_selecting_click.borrow_mut() = true;
-        drawing_area_click.queue_draw();
-    });
+                // Clear the selected area to show a brighter preview
+                ctx.save().unwrap();
+                ctx.rectangle(x, y, w, h);
+                ctx.clip();
 
-    let selection_start_release = selection_start.clone();
-    let selection_end_release = selection_end.clone();
-    let is_selecting_release = is_selecting.clone();
-    let overlay_window_release = overlay_window.clone();
-    let app_release = app.clone();
-    let parent_window_release = parent_window.clone();
+                // Redraw the preview pattern at full brightness for selected area
+                ctx.scale(
+                    width as f64 / screen_info.0 as f64,
+                    height as f64 / screen_info.1 as f64,
+                );
+                ctx.set_source_surface(&preview_surface, 0.0, 0.0).unwrap();
+                ctx.paint().unwrap();
+                ctx.restore().unwrap();
 
-    gesture_click.connect_released(move |_, _, x, y| {
-        if *is_selecting_release.borrow() {
-            *selection_end_release.borrow_mut() = Some((x, y));
-            *is_selecting_release.borrow_mut() = false;
+                // Draw thick selection border with animated effect
+                ctx.set_source_rgb(0.2, 0.6, 1.0); // Blue selection color
+                ctx.set_line_width(3.0);
+                ctx.rectangle(x, y, w, h);
+                ctx.stroke().unwrap();
 
-            // Get selection bounds
-            if let (Some(start), Some(end)) = (
-                *selection_start_release.borrow(),
-                *selection_end_release.borrow(),
-            ) {
-                let x = start.0.min(end.0) as i32;
-                let y = start.1.min(end.1) as i32;
-                let w = (end.0 - start.0).abs() as i32;
-                let h = (end.1 - start.1).abs() as i32;
+                // Add inner white border for better visibility
+                ctx.set_source_rgb(1.0, 1.0, 1.0);
+                ctx.set_line_width(1.0);
+                ctx.rectangle(x + 1.5, y + 1.5, w - 3.0, h - 3.0);
+                ctx.stroke().unwrap();
 
-                if w > 10 && h > 10 {
-                    // Minimum size check
-                    let rect = Some((x, y, w, h));
-                    overlay_window_release.close();
-                    proceed_with_screenshot(
-                        app_release.clone(),
-                        parent_window_release.clone(),
-                        rect,
-                    );
-                } else {
-                    overlay_window_release.close();
-                    parent_window_release.set_visible(true);
+                // Draw corner handles to indicate interactive selection
+                let handle_size = 8.0;
+                ctx.set_source_rgb(0.2, 0.6, 1.0);
+                // Top-left corner
+                ctx.rectangle(
+                    x - handle_size / 2.0,
+                    y - handle_size / 2.0,
+                    handle_size,
+                    handle_size,
+                );
+                ctx.fill().unwrap();
+                // Top-right corner
+                ctx.rectangle(
+                    x + w - handle_size / 2.0,
+                    y - handle_size / 2.0,
+                    handle_size,
+                    handle_size,
+                );
+                ctx.fill().unwrap();
+                // Bottom-left corner
+                ctx.rectangle(
+                    x - handle_size / 2.0,
+                    y + h - handle_size / 2.0,
+                    handle_size,
+                    handle_size,
+                );
+                ctx.fill().unwrap();
+                // Bottom-right corner
+                ctx.rectangle(
+                    x + w - handle_size / 2.0,
+                    y + h - handle_size / 2.0,
+                    handle_size,
+                    handle_size,
+                );
+                ctx.fill().unwrap();
+
+                // Draw dimension text with background
+                let text = format!("{}×{}", w as i32, h as i32);
+                ctx.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
+                ctx.set_font_size(16.0);
+
+                let text_extents = ctx.text_extents(&text).unwrap();
+                let text_x = x + 8.0;
+                let text_y = y + 25.0;
+
+                // Draw text background
+                ctx.set_source_rgba(0.0, 0.0, 0.0, 0.8);
+                ctx.rectangle(
+                    text_x - 4.0,
+                    text_y - text_extents.height() - 4.0,
+                    text_extents.width() + 8.0,
+                    text_extents.height() + 8.0,
+                );
+                ctx.fill().unwrap();
+
+                // Draw text
+                ctx.set_source_rgb(1.0, 1.0, 1.0);
+                ctx.move_to(text_x, text_y);
+                ctx.show_text(&text).unwrap();
+            }
+        });
+
+        // Mouse event handling
+        let gesture_click = gtk4::GestureClick::new();
+        let selection_start_click = selection_start.clone();
+        let selection_end_click = selection_end.clone();
+        let is_selecting_click = is_selecting.clone();
+        let drawing_area_click = drawing_area.clone();
+
+        gesture_click.connect_pressed(move |_, _, x, y| {
+            *selection_start_click.borrow_mut() = Some((x, y));
+            *selection_end_click.borrow_mut() = Some((x, y));
+            *is_selecting_click.borrow_mut() = true;
+            drawing_area_click.queue_draw();
+        });
+
+        let selection_start_release = selection_start.clone();
+        let selection_end_release = selection_end.clone();
+        let is_selecting_release = is_selecting.clone();
+        let overlay_window_release = overlay_window.clone();
+        let app_release = app.clone();
+        let parent_window_release = parent_window.clone();
+
+        gesture_click.connect_released(move |_, _, x, y| {
+            if *is_selecting_release.borrow() {
+                *selection_end_release.borrow_mut() = Some((x, y));
+                *is_selecting_release.borrow_mut() = false;
+
+                // Get selection bounds
+                if let (Some(start), Some(end)) = (
+                    *selection_start_release.borrow(),
+                    *selection_end_release.borrow(),
+                ) {
+                    let x = start.0.min(end.0) as i32;
+                    let y = start.1.min(end.1) as i32;
+                    let w = (end.0 - start.0).abs() as i32;
+                    let h = (end.1 - start.1).abs() as i32;
+
+                    if w > 10 && h > 10 {
+                        // Minimum size check
+                        let rect = Some((x, y, w, h));
+                        overlay_window_release.close();
+                        proceed_with_screenshot(
+                            app_release.clone(),
+                            parent_window_release.clone(),
+                            rect,
+                        );
+                    } else {
+                        overlay_window_release.close();
+                        parent_window_release.set_visible(true);
+                    }
                 }
             }
-        }
+        });
+
+        // Mouse motion for live selection
+        let motion_controller = gtk4::EventControllerMotion::new();
+        let selection_end_motion = selection_end.clone();
+        let is_selecting_motion = is_selecting.clone();
+        let drawing_area_motion = drawing_area.clone();
+
+        motion_controller.connect_motion(move |_, x, y| {
+            if *is_selecting_motion.borrow() {
+                *selection_end_motion.borrow_mut() = Some((x, y));
+                drawing_area_motion.queue_draw();
+            }
+        });
+
+        // Keyboard handling (Escape to cancel)
+        let key_controller = gtk4::EventControllerKey::new();
+        let overlay_window_key = overlay_window.clone();
+        let parent_window_key = parent_window.clone();
+
+        key_controller.connect_key_pressed(move |_, key, _, _| {
+            if key == gdk4::Key::Escape {
+                overlay_window_key.close();
+                parent_window_key.set_visible(true);
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        });
+
+        drawing_area.add_controller(gesture_click);
+        drawing_area.add_controller(motion_controller);
+        drawing_area.add_controller(key_controller);
+        drawing_area.set_can_focus(true);
+
+        overlay_window.set_child(Some(&drawing_area));
+
+        overlay_window.present();
+        gtk4::prelude::GtkWindowExt::set_focus(&overlay_window, Some(&drawing_area));
+
+        glib::ControlFlow::Break
     });
-
-    // Mouse motion for live selection
-    let motion_controller = gtk4::EventControllerMotion::new();
-    let selection_end_motion = selection_end.clone();
-    let is_selecting_motion = is_selecting.clone();
-    let drawing_area_motion = drawing_area.clone();
-
-    motion_controller.connect_motion(move |_, x, y| {
-        if *is_selecting_motion.borrow() {
-            *selection_end_motion.borrow_mut() = Some((x, y));
-            drawing_area_motion.queue_draw();
-        }
-    });
-
-    // Keyboard handling (Escape to cancel)
-    let key_controller = gtk4::EventControllerKey::new();
-    let overlay_window_key = overlay_window.clone();
-    let parent_window_key = parent_window.clone();
-
-    key_controller.connect_key_pressed(move |_, key, _, _| {
-        if key == gdk4::Key::Escape {
-            overlay_window_key.close();
-            parent_window_key.set_visible(true);
-            glib::Propagation::Stop
-        } else {
-            glib::Propagation::Proceed
-        }
-    });
-
-    drawing_area.add_controller(gesture_click);
-    drawing_area.add_controller(motion_controller);
-    drawing_area.add_controller(key_controller);
-    drawing_area.set_can_focus(true);
-
-    overlay_window.set_child(Some(&drawing_area));
-
-    overlay_window.present();
-    gtk4::prelude::GtkWindowExt::set_focus(&overlay_window, Some(&drawing_area));
 }
 
 fn proceed_with_screenshot(
@@ -595,8 +599,8 @@ fn show_error_dialog(parent: &ApplicationWindow, message: &str) {
 fn capture_current_screen_for_preview(width: i32, height: i32) -> cairo::ImageSurface {
     info!("Attempting to capture current screen state for preview");
 
-    // Brief delay to ensure window transitions are complete
-    std::thread::sleep(std::time::Duration::from_millis(300));
+    // Longer delay to ensure capture UI window is completely hidden
+    std::thread::sleep(std::time::Duration::from_millis(500));
 
     let capture = ScreenshotCapture::new();
 
