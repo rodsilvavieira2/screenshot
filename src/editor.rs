@@ -14,6 +14,25 @@ use std::rc::Rc;
 use crate::tools::{AnnotationTools, Point};
 use crate::ui::{load_css, StatusBar, Toolbar};
 
+fn get_screen_dimensions() -> (i32, i32) {
+    // Get screen dimensions using GDK
+    let display = gdk4::Display::default().expect("Failed to get default display");
+    let monitors = display.monitors();
+
+    if monitors.n_items() > 0 {
+        let monitor = monitors
+            .item(0)
+            .unwrap()
+            .downcast::<gdk4::Monitor>()
+            .unwrap();
+        let geometry = monitor.geometry();
+        (geometry.width(), geometry.height())
+    } else {
+        // Fallback to common screen resolution
+        (1920, 1080)
+    }
+}
+
 pub struct AnnotationEditor {
     window: ApplicationWindow,
     drawing_area: DrawingArea,
@@ -30,12 +49,18 @@ impl AnnotationEditor {
         // Load CSS
         load_css();
 
+        // Get screen dimensions to calculate window size
+        let (screen_width, screen_height) = get_screen_dimensions();
+        let window_width = screen_width / 2;
+        let window_height = screen_height / 2;
+
         // Create the main window
         let window = ApplicationWindow::builder()
             .application(app)
             .title("Flint - Screenshot Editor")
-            .default_width(800)
-            .default_height(600)
+            .default_width(window_width)
+            .default_height(window_height)
+            .resizable(true)
             .build();
 
         // Load the screenshot image
@@ -52,7 +77,7 @@ impl AnnotationEditor {
 
         // Create drawing area first so we can pass it to toolbar
         let drawing_area = DrawingArea::new();
-        drawing_area.set_size_request(image_width, image_height);
+        // Don't set fixed size request - let it scale with the window
         drawing_area.set_hexpand(true);
         drawing_area.set_vexpand(true);
         drawing_area.add_css_class("drawing-area");
@@ -88,12 +113,10 @@ impl AnnotationEditor {
 
         window.set_child(Some(&main_box));
 
-        // Resize window to fit the image
-        let window_width = image_width + 40; // Add some padding
-        let window_height = image_height + 120; // Add space for toolbar and status bar
-        window.set_default_size(window_width, window_height);
-
-        info!("Window sized to: {}x{}", window_width, window_height);
+        info!(
+            "Window sized to: {}x{} (half screen)",
+            window_width, window_height
+        );
 
         let editor = Self {
             window,
@@ -273,6 +296,7 @@ impl AnnotationEditor {
         // Setup draw function
         let tools_draw = tools.clone();
         let screenshot_surface_draw = screenshot_surface.clone();
+
         drawing_area.set_draw_func(move |_area, ctx, width, height| {
             debug!("Drawing callback: area={}x{}", width, height);
 
@@ -283,10 +307,34 @@ impl AnnotationEditor {
             // Draw the screenshot first
             if let Some(ref surface) = *screenshot_surface_draw.borrow() {
                 debug!("Drawing screenshot surface");
+
+                let image_width = surface.width() as f64;
+                let image_height = surface.height() as f64;
+                let area_width = width as f64;
+                let area_height = height as f64;
+
+                // Calculate scale factor to fit image within the drawing area
+                let scale_x = area_width / image_width;
+                let scale_y = area_height / image_height;
+                let scale = scale_x.min(scale_y);
+
+                // Calculate centered position
+                let scaled_width = image_width * scale;
+                let scaled_height = image_height * scale;
+                let offset_x = (area_width - scaled_width) / 2.0;
+                let offset_y = (area_height - scaled_height) / 2.0;
+
                 ctx.save().unwrap();
+                ctx.translate(offset_x, offset_y);
+                ctx.scale(scale, scale);
                 ctx.set_source_surface(surface, 0.0, 0.0).unwrap();
                 ctx.paint().unwrap();
                 ctx.restore().unwrap();
+
+                debug!(
+                    "Image scaled by {:.2} and positioned at ({:.1}, {:.1})",
+                    scale, offset_x, offset_y
+                );
             } else {
                 warn!("No screenshot surface available to draw");
                 // Draw a placeholder
@@ -300,8 +348,31 @@ impl AnnotationEditor {
                 ctx.show_text("No screenshot loaded").unwrap();
             }
 
-            // Draw annotations on top
-            tools_draw.borrow().draw_all(ctx);
+            // Draw annotations on top (they need to be scaled too)
+            if let Some(ref surface) = *screenshot_surface_draw.borrow() {
+                let image_width = surface.width() as f64;
+                let image_height = surface.height() as f64;
+                let area_width = width as f64;
+                let area_height = height as f64;
+
+                let scale_x = area_width / image_width;
+                let scale_y = area_height / image_height;
+                let scale = scale_x.min(scale_y);
+
+                let scaled_width = image_width * scale;
+                let scaled_height = image_height * scale;
+                let offset_x = (area_width - scaled_width) / 2.0;
+                let offset_y = (area_height - scaled_height) / 2.0;
+
+                ctx.save().unwrap();
+                ctx.translate(offset_x, offset_y);
+                ctx.scale(scale, scale);
+                tools_draw.borrow().draw_all(ctx);
+                ctx.restore().unwrap();
+            } else {
+                // If no image, draw annotations without scaling
+                tools_draw.borrow().draw_all(ctx);
+            }
         });
 
         // Mouse button press
@@ -309,11 +380,41 @@ impl AnnotationEditor {
         let tools_click = tools.clone();
         let is_drawing_click = is_drawing.clone();
         let drawing_area_click = drawing_area.clone();
+        let screenshot_surface_click = screenshot_surface.clone();
 
         gesture_click.connect_pressed(move |_, _, x, y| {
-            debug!("Mouse pressed at ({}, {})", x, y);
+            debug!("Mouse pressed at screen coords ({}, {})", x, y);
+
+            // Convert screen coordinates to image coordinates
+            let (image_x, image_y) = if let Some(ref surface) = *screenshot_surface_click.borrow() {
+                let allocation = drawing_area_click.allocation();
+                let area_width = allocation.width() as f64;
+                let area_height = allocation.height() as f64;
+                let image_width = surface.width() as f64;
+                let image_height = surface.height() as f64;
+
+                let scale_x = area_width / image_width;
+                let scale_y = area_height / image_height;
+                let scale = scale_x.min(scale_y);
+
+                let scaled_width = image_width * scale;
+                let scaled_height = image_height * scale;
+                let offset_x = (area_width - scaled_width) / 2.0;
+                let offset_y = (area_height - scaled_height) / 2.0;
+
+                let image_x = (x - offset_x) / scale;
+                let image_y = (y - offset_y) / scale;
+
+                debug!("Converted to image coords ({:.1}, {:.1})", image_x, image_y);
+                (image_x, image_y)
+            } else {
+                (x, y)
+            };
+
             *is_drawing_click.borrow_mut() = true;
-            tools_click.borrow_mut().start_stroke(Point::new(x, y));
+            tools_click
+                .borrow_mut()
+                .start_stroke(Point::new(image_x, image_y));
             drawing_area_click.queue_draw();
         });
 
@@ -338,14 +439,42 @@ impl AnnotationEditor {
         let is_drawing_motion = is_drawing.clone();
         let drawing_area_motion = drawing_area.clone();
         let status_bar_motion = status_bar.clone();
+        let screenshot_surface_motion = screenshot_surface.clone();
 
         motion_controller.connect_motion(move |_, x, y| {
-            status_bar_motion.set_coordinates(x, y);
+            // Convert screen coordinates to image coordinates for display
+            let (image_x, image_y) = if let Some(ref surface) = *screenshot_surface_motion.borrow()
+            {
+                let allocation = drawing_area_motion.allocation();
+                let area_width = allocation.width() as f64;
+                let area_height = allocation.height() as f64;
+                let image_width = surface.width() as f64;
+                let image_height = surface.height() as f64;
+
+                let scale_x = area_width / image_width;
+                let scale_y = area_height / image_height;
+                let scale = scale_x.min(scale_y);
+
+                let scaled_width = image_width * scale;
+                let scaled_height = image_height * scale;
+                let offset_x = (area_width - scaled_width) / 2.0;
+                let offset_y = (area_height - scaled_height) / 2.0;
+
+                let image_x = (x - offset_x) / scale;
+                let image_y = (y - offset_y) / scale;
+
+                (image_x, image_y)
+            } else {
+                (x, y)
+            };
+
+            // Show image coordinates in status bar
+            status_bar_motion.set_coordinates(image_x, image_y);
 
             if *is_drawing_motion.borrow() {
                 tools_motion
                     .borrow_mut()
-                    .add_point_to_stroke(Point::new(x, y));
+                    .add_point_to_stroke(Point::new(image_x, image_y));
                 drawing_area_motion.queue_draw();
             }
         });
