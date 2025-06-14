@@ -464,6 +464,19 @@ pub fn load_css() {
         .fade-in {
             animation: fade-in 300ms ease-out;
         }
+
+        /* Transparent overlay for rectangle selection */
+        .selection-overlay {
+            background-color: transparent;
+        }
+
+        .transparent-area {
+            background-color: transparent;
+        }
+
+        .selection-overlay, .selection-overlay * {
+            background: rgba(0, 0, 0, 0);
+        }
     "#;
 
     provider.load_from_data(css);

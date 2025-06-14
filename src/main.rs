@@ -1,5 +1,6 @@
 use anyhow::Result;
 use cairo;
+use gdk4;
 use gtk4::prelude::*;
 use gtk4::{glib, Application, ApplicationWindow, Box, Button, DrawingArea, Label, Orientation};
 use log::{error, info};
@@ -196,6 +197,9 @@ fn start_screenshot_capture(app: Application, window: ApplicationWindow, is_rect
 }
 
 fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) {
+    // Hide parent window first
+    parent_window.set_visible(false);
+
     // Create fullscreen overlay window for rectangle selection
     let overlay_window = ApplicationWindow::builder()
         .application(&app)
@@ -204,6 +208,11 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
         .default_height(1080)
         .decorated(false)
         .build();
+
+    // Configure for Wayland compatibility
+    overlay_window.set_modal(true);
+    overlay_window.set_resizable(false);
+    overlay_window.set_deletable(false);
 
     overlay_window.fullscreen();
 
@@ -219,15 +228,49 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
     let selection_end_draw = selection_end.clone();
 
     drawing_area.set_draw_func(move |_, ctx, width, height| {
-        ctx.set_source_rgba(0.0, 0.0, 0.0, 0.15);
+        // Draw semi-transparent dark background for Wayland
+        ctx.set_source_rgba(0.0, 0.0, 0.0, 0.7);
         ctx.rectangle(0.0, 0.0, width as f64, height as f64);
         ctx.fill().unwrap();
 
-        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.9);
-        ctx.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
-        ctx.set_font_size(24.0);
+        // Add subtle grid to help with positioning
+        ctx.set_source_rgba(0.3, 0.3, 0.3, 0.3);
+        ctx.set_line_width(1.0);
+
+        // Draw grid lines every 50 pixels
+        let mut x = 50.0;
+        while x < width as f64 {
+            ctx.move_to(x, 0.0);
+            ctx.line_to(x, height as f64);
+            x += 50.0;
+        }
+
+        let mut y = 50.0;
+        while y < height as f64 {
+            ctx.move_to(0.0, y);
+            ctx.line_to(width as f64, y);
+            y += 50.0;
+        }
+        ctx.stroke().unwrap();
+
+        // Draw instruction text with background for visibility
         let instruction_text = "Click and drag to select rectangle area • Press Escape to cancel";
-        ctx.move_to(20.0, 40.0);
+        ctx.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
+        ctx.set_font_size(16.0);
+
+        // Measure text width for proper background sizing
+        let text_extents = ctx.text_extents(instruction_text).unwrap();
+        let text_width = text_extents.width();
+        let text_height = text_extents.height();
+
+        // Draw background for text with rounded corners
+        ctx.set_source_rgba(0.0, 0.0, 0.0, 0.8);
+        ctx.rectangle(10.0, 10.0, text_width + 20.0, text_height + 15.0);
+        ctx.fill().unwrap();
+
+        // Draw the instruction text
+        ctx.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+        ctx.move_to(20.0, 30.0);
         ctx.show_text(instruction_text).unwrap();
 
         if let (Some(start), Some(end)) =
@@ -238,13 +281,12 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
             let w = (end.0 - start.0).abs();
             let h = (end.1 - start.1).abs();
 
-            // Clear selection area to make it more transparent
-            ctx.set_operator(cairo::Operator::Clear);
+            // Make the selected area bright to show what will be captured
+            ctx.save().unwrap();
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.3);
             ctx.rectangle(x, y, w, h);
             ctx.fill().unwrap();
-
-            // Reset operator and draw selection border
-            ctx.set_operator(cairo::Operator::Over);
+            ctx.restore().unwrap();
 
             // Draw thick red border
             ctx.set_source_rgb(1.0, 0.0, 0.0);
@@ -355,6 +397,7 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
     drawing_area.set_can_focus(true);
 
     overlay_window.set_child(Some(&drawing_area));
+
     overlay_window.present();
     gtk4::prelude::GtkWindowExt::set_focus(&overlay_window, Some(&drawing_area));
 }
