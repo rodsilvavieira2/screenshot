@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Result};
 use image::GenericImageView;
 use log::{debug, info, warn};
-use std::path::PathBuf;
 
 pub struct ScreenshotCapture {
     pub use_portal: bool,

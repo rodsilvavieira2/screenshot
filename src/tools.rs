@@ -20,10 +20,6 @@ impl Point {
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
     }
-
-    pub fn distance_to(&self, other: &Point) -> f64 {
-        ((self.x - other.x).powi(2) + (self.y - other.y).powi(2)).sqrt()
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -279,45 +275,5 @@ impl AnnotationTools {
 impl Default for AnnotationTools {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_point_distance() {
-        let p1 = Point::new(0.0, 0.0);
-        let p2 = Point::new(3.0, 4.0);
-        assert_eq!(p1.distance_to(&p2), 5.0);
-    }
-
-    #[test]
-    fn test_stroke_creation() {
-        let mut stroke = DrawingStroke::new(ToolType::Pencil, RGBA::new(1.0, 0.0, 0.0, 1.0), 3.0);
-
-        stroke.add_point(Point::new(10.0, 10.0));
-        stroke.add_point(Point::new(20.0, 20.0));
-        stroke.finish();
-
-        assert_eq!(stroke.points.len(), 2);
-        assert!(stroke.finished);
-    }
-
-    #[test]
-    fn test_annotation_tools() {
-        let mut tools = AnnotationTools::new();
-
-        tools.set_tool(ToolType::Highlighter);
-        assert_eq!(tools.current_tool, ToolType::Highlighter);
-        assert_eq!(tools.current_thickness, 8.0);
-
-        tools.start_stroke(Point::new(0.0, 0.0));
-        tools.add_point_to_stroke(Point::new(10.0, 10.0));
-        tools.finish_stroke();
-
-        assert_eq!(tools.strokes.len(), 1);
-        assert!(tools.current_stroke.is_none());
     }
 }

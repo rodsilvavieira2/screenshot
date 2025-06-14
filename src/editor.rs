@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use arboard::Clipboard;
 use cairo::{Context, Format, ImageSurface};
 use gdk4::ModifierType;
 use gtk4::prelude::*;
@@ -22,7 +21,6 @@ pub struct AnnotationEditor {
     status_bar: StatusBar,
     tools: Rc<RefCell<AnnotationTools>>,
     screenshot_surface: Rc<RefCell<Option<ImageSurface>>>,
-    is_drawing: Rc<RefCell<bool>>,
     image_width: i32,
     image_height: i32,
 }
@@ -104,7 +102,6 @@ impl AnnotationEditor {
             status_bar,
             tools,
             screenshot_surface,
-            is_drawing,
             image_width,
             image_height,
         };
@@ -404,22 +401,6 @@ impl AnnotationEditor {
         info!("Editor window presented and focused");
     }
 
-    fn argb_to_rgba(&self, argb_data: &[u8], width: i32, height: i32) -> Vec<u8> {
-        let mut rgba_data = Vec::with_capacity((width * height * 4) as usize);
-
-        for chunk in argb_data.chunks_exact(4) {
-            // ARGB -> RGBA conversion
-            let a = chunk[0];
-            let r = chunk[1];
-            let g = chunk[2];
-            let b = chunk[3];
-
-            rgba_data.extend_from_slice(&[r, g, b, a]);
-        }
-
-        rgba_data
-    }
-
     fn handle_save_action(
         window: &ApplicationWindow,
         screenshot_surface: &Rc<RefCell<Option<ImageSurface>>>,
@@ -579,26 +560,5 @@ impl AnnotationEditor {
         }
 
         rgba_data
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_argb_to_rgba_conversion() {
-        // Create a minimal test without requiring full editor
-        let argb = vec![255, 255, 0, 0, 128, 0, 255, 0]; // Two pixels
-        let mut rgba_data = Vec::with_capacity(8);
-
-        for chunk in argb.chunks_exact(4) {
-            let a = chunk[0];
-            let r = chunk[1];
-            let g = chunk[2];
-            let b = chunk[3];
-
-            rgba_data.extend_from_slice(&[r, g, b, a]);
-        }
-
-        assert_eq!(rgba_data, vec![255, 0, 0, 255, 0, 255, 0, 128]);
     }
 }

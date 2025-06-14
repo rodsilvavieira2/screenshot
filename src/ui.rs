@@ -12,7 +12,6 @@ pub struct Toolbar {
     tool_buttons: Vec<ToggleButton>,
     color_combo: ComboBoxText,
     thickness_scale: Scale,
-    current_tool: Rc<RefCell<ToolType>>,
     save_button: Button,
     copy_button: Button,
     clear_button: Button,
@@ -84,7 +83,6 @@ impl Toolbar {
             tool_buttons,
             color_combo,
             thickness_scale,
-            current_tool,
             save_button,
             copy_button,
             clear_button,
@@ -475,23 +473,4 @@ pub fn load_css() {
         &provider,
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_toolbar_creation() {
-        // Note: GTK4 initialization required for actual testing
-        // This is a placeholder test
-        assert_eq!(2 + 2, 4);
-    }
-
-    #[test]
-    fn test_status_bar_creation() {
-        // Note: GTK4 initialization required for actual testing
-        // This is a placeholder test
-        assert_eq!(2 + 2, 4);
-    }
 }
