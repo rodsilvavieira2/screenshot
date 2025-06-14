@@ -1,12 +1,12 @@
-use gtk4::prelude::*;
-use gtk4::{glib, Application, ApplicationWindow, Button, Box, Orientation, Label, DrawingArea};
 use anyhow::Result;
-use log::{info, error};
-use std::thread;
-use std::sync::mpsc;
+use cairo;
+use gtk4::prelude::*;
+use gtk4::{glib, Application, ApplicationWindow, Box, Button, DrawingArea, Label, Orientation};
+use log::{error, info};
 use std::cell::RefCell;
 use std::rc::Rc;
-use cairo;
+use std::sync::mpsc;
+use std::thread;
 
 mod capture;
 mod editor;
@@ -21,7 +21,7 @@ const APP_ID: &str = "com.flint.Screenshot";
 
 fn main() -> Result<()> {
     env_logger::init();
-    
+
     info!("Starting Flint Screenshot Tool v1.0.0");
 
     // Check for test mode
@@ -35,21 +35,19 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let app = Application::builder()
-        .application_id(APP_ID)
-        .build();
+    let app = Application::builder().application_id(APP_ID).build();
 
     app.connect_activate(build_capture_ui);
-    
+
     let exit_code = app.run_with_args(&args);
-    
+
     std::process::exit(exit_code.into());
 }
 
 fn build_capture_ui(app: &Application) {
     // Load CSS styles
     load_css();
-    
+
     // Create the main capture window
     let window = ApplicationWindow::builder()
         .application(app)
@@ -88,14 +86,14 @@ fn build_capture_ui(app: &Application) {
 
     // Capture buttons container
     let button_box = Box::new(Orientation::Vertical, 10);
-    
+
     // Full screenshot button
     let capture_button = Button::with_label("📷 Take Full Screenshot");
     capture_button.set_size_request(200, 50);
     capture_button.add_css_class("suggested-action");
     capture_button.add_css_class("pill");
     capture_button.add_css_class("capture-button");
-    
+
     // Rectangle selection button
     let rect_button = Button::with_label("🔲 Select Rectangle Area");
     rect_button.set_size_request(200, 50);
@@ -106,13 +104,13 @@ fn build_capture_ui(app: &Application) {
     let window_clone = window.clone();
     let app_clone2 = app.clone();
     let window_clone2 = window.clone();
-    
+
     // Full screenshot button callback
     capture_button.connect_clicked(move |_| {
         info!("Full screenshot button clicked");
         start_screenshot_capture(app_clone.clone(), window_clone.clone(), false);
     });
-    
+
     // Rectangle selection button callback
     rect_button.connect_clicked(move |_| {
         info!("Rectangle selection button clicked");
@@ -122,7 +120,7 @@ fn build_capture_ui(app: &Application) {
     // Add a quit button
     let quit_button = Button::with_label("❌ Quit");
     quit_button.set_margin_top(10);
-    
+
     let window_for_quit = window.clone();
     quit_button.connect_clicked(move |_| {
         window_for_quit.close();
@@ -161,13 +159,13 @@ fn build_capture_ui(app: &Application) {
             _ => glib::Propagation::Proceed,
         }
     }));
-    
+
     window.add_controller(key_controller);
 
     // Add buttons to button container
     button_box.append(&capture_button);
     button_box.append(&rect_button);
-    
+
     // Add widgets to container
     main_box.append(&title_label);
     main_box.append(&desc_label);
@@ -180,14 +178,14 @@ fn build_capture_ui(app: &Application) {
 
     // Show the window
     window.present();
-    
+
     info!("Capture interface ready");
 }
 
 fn start_screenshot_capture(app: Application, window: ApplicationWindow, is_rectangle: bool) {
     // Hide the capture window
     window.set_visible(false);
-    
+
     if is_rectangle {
         // Show rectangle selection overlay
         show_rectangle_selection(app, window);
@@ -198,7 +196,7 @@ fn start_screenshot_capture(app: Application, window: ApplicationWindow, is_rect
 }
 
 fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) {
-    // Create fullscreen overlay window for rectangle selection  
+    // Create fullscreen overlay window for rectangle selection
     let overlay_window = ApplicationWindow::builder()
         .application(&app)
         .title("Select Rectangle Area")
@@ -206,66 +204,61 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
         .default_height(1080)
         .decorated(false)
         .build();
-    
-    // Make window fullscreen with low opacity to see through
+
     overlay_window.fullscreen();
-    overlay_window.set_opacity(0.9);
-    
-    // Create drawing area for selection
+    overlay_window.set_opacity(0.1);
+
     let drawing_area = DrawingArea::new();
     drawing_area.set_hexpand(true);
     drawing_area.set_vexpand(true);
-    
-    // Selection state
+
     let selection_start = Rc::new(RefCell::new(None::<(f64, f64)>));
     let selection_end = Rc::new(RefCell::new(None::<(f64, f64)>));
     let is_selecting = Rc::new(RefCell::new(false));
-    
-    // Draw selection rectangle with light overlay
+
     let selection_start_draw = selection_start.clone();
     let selection_end_draw = selection_end.clone();
-    
+
     drawing_area.set_draw_func(move |_, ctx, width, height| {
-        // Draw very light semi-transparent overlay
         ctx.set_source_rgba(0.0, 0.0, 0.0, 0.15);
         ctx.rectangle(0.0, 0.0, width as f64, height as f64);
         ctx.fill().unwrap();
-        
-        // Draw instruction text at the top
+
         ctx.set_source_rgba(1.0, 1.0, 1.0, 0.9);
         ctx.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
         ctx.set_font_size(24.0);
         let instruction_text = "Click and drag to select rectangle area • Press Escape to cancel";
         ctx.move_to(20.0, 40.0);
         ctx.show_text(instruction_text).unwrap();
-        
-        // Draw selection rectangle if exists
-        if let (Some(start), Some(end)) = (*selection_start_draw.borrow(), *selection_end_draw.borrow()) {
+
+        if let (Some(start), Some(end)) =
+            (*selection_start_draw.borrow(), *selection_end_draw.borrow())
+        {
             let x = start.0.min(end.0);
             let y = start.1.min(end.1);
             let w = (end.0 - start.0).abs();
             let h = (end.1 - start.1).abs();
-            
+
             // Clear selection area to make it more transparent
             ctx.set_operator(cairo::Operator::Clear);
             ctx.rectangle(x, y, w, h);
             ctx.fill().unwrap();
-            
+
             // Reset operator and draw selection border
             ctx.set_operator(cairo::Operator::Over);
-            
+
             // Draw thick red border
             ctx.set_source_rgb(1.0, 0.0, 0.0);
             ctx.set_line_width(4.0);
             ctx.rectangle(x, y, w, h);
             ctx.stroke().unwrap();
-            
+
             // Add inner white border for better visibility
             ctx.set_source_rgb(1.0, 1.0, 1.0);
             ctx.set_line_width(2.0);
             ctx.rectangle(x + 1.0, y + 1.0, w - 2.0, h - 2.0);
             ctx.stroke().unwrap();
-            
+
             // Draw dimension text
             let text = format!("{}×{}", w as i32, h as i32);
             ctx.set_source_rgb(1.0, 1.0, 1.0);
@@ -275,44 +268,52 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
             ctx.show_text(&text).unwrap();
         }
     });
-    
+
     // Mouse event handling
     let gesture_click = gtk4::GestureClick::new();
     let selection_start_click = selection_start.clone();
     let selection_end_click = selection_end.clone();
     let is_selecting_click = is_selecting.clone();
     let drawing_area_click = drawing_area.clone();
-    
+
     gesture_click.connect_pressed(move |_, _, x, y| {
         *selection_start_click.borrow_mut() = Some((x, y));
         *selection_end_click.borrow_mut() = Some((x, y));
         *is_selecting_click.borrow_mut() = true;
         drawing_area_click.queue_draw();
     });
-    
+
     let selection_start_release = selection_start.clone();
     let selection_end_release = selection_end.clone();
     let is_selecting_release = is_selecting.clone();
     let overlay_window_release = overlay_window.clone();
     let app_release = app.clone();
     let parent_window_release = parent_window.clone();
-    
+
     gesture_click.connect_released(move |_, _, x, y| {
         if *is_selecting_release.borrow() {
             *selection_end_release.borrow_mut() = Some((x, y));
             *is_selecting_release.borrow_mut() = false;
-            
+
             // Get selection bounds
-            if let (Some(start), Some(end)) = (*selection_start_release.borrow(), *selection_end_release.borrow()) {
+            if let (Some(start), Some(end)) = (
+                *selection_start_release.borrow(),
+                *selection_end_release.borrow(),
+            ) {
                 let x = start.0.min(end.0) as i32;
                 let y = start.1.min(end.1) as i32;
                 let w = (end.0 - start.0).abs() as i32;
                 let h = (end.1 - start.1).abs() as i32;
-                
-                if w > 10 && h > 10 { // Minimum size check
+
+                if w > 10 && h > 10 {
+                    // Minimum size check
                     let rect = Some((x, y, w, h));
                     overlay_window_release.close();
-                    proceed_with_screenshot(app_release.clone(), parent_window_release.clone(), rect);
+                    proceed_with_screenshot(
+                        app_release.clone(),
+                        parent_window_release.clone(),
+                        rect,
+                    );
                 } else {
                     overlay_window_release.close();
                     parent_window_release.set_visible(true);
@@ -320,25 +321,25 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
             }
         }
     });
-    
+
     // Mouse motion for live selection
     let motion_controller = gtk4::EventControllerMotion::new();
     let selection_end_motion = selection_end.clone();
     let is_selecting_motion = is_selecting.clone();
     let drawing_area_motion = drawing_area.clone();
-    
+
     motion_controller.connect_motion(move |_, x, y| {
         if *is_selecting_motion.borrow() {
             *selection_end_motion.borrow_mut() = Some((x, y));
             drawing_area_motion.queue_draw();
         }
     });
-    
+
     // Keyboard handling (Escape to cancel)
     let key_controller = gtk4::EventControllerKey::new();
     let overlay_window_key = overlay_window.clone();
     let parent_window_key = parent_window.clone();
-    
+
     key_controller.connect_key_pressed(move |_, key, _, _| {
         if key == gdk4::Key::Escape {
             overlay_window_key.close();
@@ -348,51 +349,58 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
             glib::Propagation::Proceed
         }
     });
-    
+
     drawing_area.add_controller(gesture_click);
     drawing_area.add_controller(motion_controller);
     drawing_area.add_controller(key_controller);
     drawing_area.set_can_focus(true);
-    
+
     overlay_window.set_child(Some(&drawing_area));
     overlay_window.present();
     gtk4::prelude::GtkWindowExt::set_focus(&overlay_window, Some(&drawing_area));
 }
 
-fn proceed_with_screenshot(app: Application, window: ApplicationWindow, rect: Option<(i32, i32, i32, i32)>) {
+fn proceed_with_screenshot(
+    app: Application,
+    window: ApplicationWindow,
+    rect: Option<(i32, i32, i32, i32)>,
+) {
     // Create a channel for communication between threads
     let (sender, receiver) = mpsc::channel();
-    
+
     // Spawn a thread for screenshot capture
     thread::spawn(move || {
         info!("Screenshot capture thread started");
-        
+
         // Add delay to ensure window is hidden
         thread::sleep(std::time::Duration::from_millis(500));
         info!("Starting screenshot capture after delay");
-        
+
         let result = take_screenshot_sync(rect);
         match &result {
             Ok(_) => info!("Screenshot capture completed successfully"),
             Err(e) => error!("Screenshot capture failed: {}", e),
         }
-        
+
         if let Err(e) = sender.send(result) {
             error!("Failed to send screenshot result: {}", e);
         }
     });
-    
+
     // Use glib timeout to check for completion
     glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
         match receiver.try_recv() {
             Ok(result) => {
                 match result {
                     Ok(image_data) => {
-                        info!("Screenshot captured successfully ({} bytes), opening editor", image_data.len());
-                        
+                        info!(
+                            "Screenshot captured successfully ({} bytes), opening editor",
+                            image_data.len()
+                        );
+
                         // Close the capture window
                         window.close();
-                        
+
                         // Create and show the annotation editor
                         match AnnotationEditor::new(&app, image_data) {
                             Ok(editor) => {
@@ -401,13 +409,16 @@ fn proceed_with_screenshot(app: Application, window: ApplicationWindow, rect: Op
                             }
                             Err(e) => {
                                 error!("Failed to create editor: {}", e);
-                                show_error_dialog(&window, &format!("Failed to open editor: {}", e));
+                                show_error_dialog(
+                                    &window,
+                                    &format!("Failed to open editor: {}", e),
+                                );
                             }
                         }
                     }
                     Err(e) => {
                         error!("Failed to capture screenshot: {}", e);
-                        
+
                         // Show the window again and display error
                         window.set_visible(true);
                         show_error_dialog(&window, &format!("Failed to capture screenshot: {}", e));
@@ -432,7 +443,7 @@ fn proceed_with_screenshot(app: Application, window: ApplicationWindow, rect: Op
 fn take_screenshot_sync(rect: Option<(i32, i32, i32, i32)>) -> Result<Vec<u8>> {
     info!("Initializing screenshot capture");
     let capture = ScreenshotCapture::new();
-    
+
     info!("Attempting to capture screenshot");
     let result = if let Some((x, y, w, h)) = rect {
         info!("Capturing rectangle region: {}x{} at ({}, {})", w, h, x, y);
@@ -440,12 +451,12 @@ fn take_screenshot_sync(rect: Option<(i32, i32, i32, i32)>) -> Result<Vec<u8>> {
     } else {
         capture.take_screenshot_blocking()
     };
-    
+
     match &result {
         Ok(data) => info!("Screenshot captured: {} bytes", data.len()),
         Err(e) => error!("Screenshot capture error: {}", e),
     }
-    
+
     result
 }
 
