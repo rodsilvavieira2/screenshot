@@ -206,7 +206,6 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
         .build();
 
     overlay_window.fullscreen();
-    overlay_window.set_opacity(0.1);
 
     let drawing_area = DrawingArea::new();
     drawing_area.set_hexpand(true);
