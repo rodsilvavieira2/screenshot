@@ -60,17 +60,22 @@ impl DrawingStroke {
         }
 
         ctx.save().ok();
-        
+
         // Set color
-        ctx.set_source_rgba(self.color.red() as f64, self.color.green() as f64, self.color.blue() as f64, self.color.alpha() as f64);
-        
+        ctx.set_source_rgba(
+            self.color.red() as f64,
+            self.color.green() as f64,
+            self.color.blue() as f64,
+            self.color.alpha() as f64,
+        );
+
         match self.tool_type {
             ToolType::Pencil => self.draw_pencil(ctx),
             ToolType::Line => self.draw_line(ctx),
             ToolType::Arrow => self.draw_arrow(ctx),
             ToolType::Highlighter => self.draw_highlighter(ctx),
         }
-        
+
         ctx.restore().ok();
     }
 
@@ -81,11 +86,11 @@ impl DrawingStroke {
 
         if let Some(first_point) = self.points.first() {
             ctx.move_to(first_point.x, first_point.y);
-            
+
             for point in self.points.iter().skip(1) {
                 ctx.line_to(point.x, point.y);
             }
-            
+
             ctx.stroke().unwrap();
         }
     }
@@ -94,10 +99,10 @@ impl DrawingStroke {
         if self.points.len() >= 2 {
             let start = &self.points[0];
             let end = &self.points[self.points.len() - 1];
-            
+
             ctx.set_line_width(self.thickness);
             ctx.set_line_cap(LineCap::Round);
-            
+
             ctx.move_to(start.x, start.y);
             ctx.line_to(end.x, end.y);
             ctx.stroke().unwrap();
@@ -108,15 +113,15 @@ impl DrawingStroke {
         if self.points.len() >= 2 {
             let start = &self.points[0];
             let end = &self.points[self.points.len() - 1];
-            
+
             // Draw the main line
             ctx.set_line_width(self.thickness);
             ctx.set_line_cap(LineCap::Round);
-            
+
             ctx.move_to(start.x, start.y);
             ctx.line_to(end.x, end.y);
             ctx.stroke().unwrap();
-            
+
             // Draw arrowhead
             self.draw_arrowhead(ctx, start, end);
         }
@@ -125,27 +130,31 @@ impl DrawingStroke {
     fn draw_arrowhead(&self, ctx: &Context, start: &Point, end: &Point) {
         let arrow_length = self.thickness * 3.0;
         let arrow_angle = std::f64::consts::PI / 6.0; // 30 degrees
-        
+
         // Calculate the direction vector
         let dx = end.x - start.x;
         let dy = end.y - start.y;
         let length = (dx * dx + dy * dy).sqrt();
-        
+
         if length == 0.0 {
             return;
         }
-        
+
         // Normalize the direction vector
         let unit_x = dx / length;
         let unit_y = dy / length;
-        
+
         // Calculate arrowhead points
-        let arrow_x1 = end.x - arrow_length * (unit_x * arrow_angle.cos() - unit_y * arrow_angle.sin());
-        let arrow_y1 = end.y - arrow_length * (unit_x * arrow_angle.sin() + unit_y * arrow_angle.cos());
-        
-        let arrow_x2 = end.x - arrow_length * (unit_x * arrow_angle.cos() + unit_y * arrow_angle.sin());
-        let arrow_y2 = end.y - arrow_length * (-unit_x * arrow_angle.sin() + unit_y * arrow_angle.cos());
-        
+        let arrow_x1 =
+            end.x - arrow_length * (unit_x * arrow_angle.cos() - unit_y * arrow_angle.sin());
+        let arrow_y1 =
+            end.y - arrow_length * (unit_x * arrow_angle.sin() + unit_y * arrow_angle.cos());
+
+        let arrow_x2 =
+            end.x - arrow_length * (unit_x * arrow_angle.cos() + unit_y * arrow_angle.sin());
+        let arrow_y2 =
+            end.y - arrow_length * (-unit_x * arrow_angle.sin() + unit_y * arrow_angle.cos());
+
         // Draw the arrowhead
         ctx.move_to(end.x, end.y);
         ctx.line_to(arrow_x1, arrow_y1);
@@ -158,7 +167,7 @@ impl DrawingStroke {
         ctx.set_line_width(self.thickness);
         ctx.set_line_cap(LineCap::Round);
         ctx.set_line_join(LineJoin::Round);
-        
+
         // Highlighter should be semi-transparent
         ctx.set_source_rgba(
             self.color.red() as f64,
@@ -169,11 +178,11 @@ impl DrawingStroke {
 
         if let Some(first_point) = self.points.first() {
             ctx.move_to(first_point.x, first_point.y);
-            
+
             for point in self.points.iter().skip(1) {
                 ctx.line_to(point.x, point.y);
             }
-            
+
             ctx.stroke().unwrap();
         }
     }
@@ -201,7 +210,7 @@ impl AnnotationTools {
 
     pub fn set_tool(&mut self, tool: ToolType) {
         self.current_tool = tool;
-        
+
         // Set default thickness based on tool
         self.current_thickness = match tool {
             ToolType::Pencil => 3.0,
@@ -259,28 +268,11 @@ impl AnnotationTools {
         for stroke in &self.strokes {
             stroke.draw(ctx);
         }
-        
+
         // Draw current stroke if any
         if let Some(ref stroke) = self.current_stroke {
             stroke.draw(ctx);
         }
-    }
-
-    pub fn get_predefined_colors() -> Vec<RGBA> {
-        vec![
-            RGBA::new(1.0, 0.0, 0.0, 1.0),     // Red
-            RGBA::new(0.0, 1.0, 0.0, 1.0),     // Green
-            RGBA::new(0.0, 0.0, 1.0, 1.0),     // Blue
-            RGBA::new(1.0, 1.0, 0.0, 1.0),     // Yellow
-            RGBA::new(1.0, 0.0, 1.0, 1.0),     // Magenta
-            RGBA::new(0.0, 1.0, 1.0, 1.0),     // Cyan
-            RGBA::new(0.0, 0.0, 0.0, 1.0),     // Black
-            RGBA::new(1.0, 1.0, 1.0, 1.0),     // White
-        ]
-    }
-
-    pub fn get_thickness_options() -> Vec<f64> {
-        vec![1.0, 3.0, 5.0, 8.0, 12.0]
     }
 }
 
@@ -303,16 +295,12 @@ mod tests {
 
     #[test]
     fn test_stroke_creation() {
-        let mut stroke = DrawingStroke::new(
-            ToolType::Pencil,
-            RGBA::new(1.0, 0.0, 0.0, 1.0),
-            3.0,
-        );
-        
+        let mut stroke = DrawingStroke::new(ToolType::Pencil, RGBA::new(1.0, 0.0, 0.0, 1.0), 3.0);
+
         stroke.add_point(Point::new(10.0, 10.0));
         stroke.add_point(Point::new(20.0, 20.0));
         stroke.finish();
-        
+
         assert_eq!(stroke.points.len(), 2);
         assert!(stroke.finished);
     }
@@ -320,15 +308,15 @@ mod tests {
     #[test]
     fn test_annotation_tools() {
         let mut tools = AnnotationTools::new();
-        
+
         tools.set_tool(ToolType::Highlighter);
         assert_eq!(tools.current_tool, ToolType::Highlighter);
         assert_eq!(tools.current_thickness, 8.0);
-        
+
         tools.start_stroke(Point::new(0.0, 0.0));
         tools.add_point_to_stroke(Point::new(10.0, 10.0));
         tools.finish_stroke();
-        
+
         assert_eq!(tools.strokes.len(), 1);
         assert!(tools.current_stroke.is_none());
     }

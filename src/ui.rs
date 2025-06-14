@@ -1,10 +1,7 @@
-use gtk4::prelude::*;
-use gtk4::{
-    Box, Button, ComboBoxText, Label, Orientation, Scale, Separator,
-    ToggleButton,
-};
 use gdk4::RGBA;
 use glib::clone;
+use gtk4::prelude::*;
+use gtk4::{Box, Button, ComboBoxText, Label, Orientation, Scale, Separator, ToggleButton};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -35,7 +32,7 @@ impl Toolbar {
         // Tool selection buttons
         let tool_box = Box::new(Orientation::Horizontal, 2);
         tool_box.add_css_class("linked");
-        
+
         let tool_buttons = Self::create_tool_buttons(&tool_box, current_tool.clone());
 
         // Separator
@@ -144,16 +141,9 @@ impl Toolbar {
 
     fn create_color_combo() -> ComboBoxText {
         let combo = ComboBoxText::new();
-        
+
         let colors = vec![
-            "Red",
-            "Green", 
-            "Blue",
-            "Yellow",
-            "Pink",
-            "Cyan",
-            "Black",
-            "White",
+            "Red", "Green", "Blue", "Yellow", "Pink", "Cyan", "Black", "White",
         ];
 
         for color in &colors {
@@ -198,44 +188,6 @@ impl Toolbar {
         button
     }
 
-    pub fn update_thickness_for_tool(&self, tool: ToolType) {
-        let default_thickness = match tool {
-            ToolType::Pencil => 3.0,
-            ToolType::Line => 2.0,
-            ToolType::Arrow => 2.0,
-            ToolType::Highlighter => 8.0,
-        };
-        
-        self.thickness_scale.set_value(default_thickness);
-    }
-
-    pub fn get_current_tool(&self) -> ToolType {
-        *self.current_tool.borrow()
-    }
-
-    pub fn get_current_color(&self) -> RGBA {
-        let colors = vec![
-            RGBA::new(1.0, 0.0, 0.0, 1.0), // Red
-            RGBA::new(0.0, 0.8, 0.0, 1.0), // Green
-            RGBA::new(0.0, 0.0, 1.0, 1.0), // Blue
-            RGBA::new(1.0, 0.9, 0.0, 1.0), // Yellow
-            RGBA::new(1.0, 0.4, 0.7, 1.0), // Pink
-            RGBA::new(0.0, 0.8, 0.8, 1.0), // Cyan
-            RGBA::new(0.0, 0.0, 0.0, 1.0), // Black
-            RGBA::new(1.0, 1.0, 1.0, 1.0), // White
-        ];
-
-        if let Some(active) = self.color_combo.active() {
-            colors.get(active as usize).copied().unwrap_or(colors[0])
-        } else {
-            colors[0]
-        }
-    }
-
-    pub fn get_current_thickness(&self) -> f64 {
-        self.thickness_scale.value()
-    }
-
     pub fn connect_tool_changed<F>(&self, callback: F)
     where
         F: Fn(ToolType) + 'static + Clone,
@@ -248,7 +200,7 @@ impl Toolbar {
                 3 => ToolType::Highlighter,
                 _ => ToolType::Pencil,
             };
-            
+
             let callback_clone = callback.clone();
             button.connect_toggled(clone!(@weak button => move |btn| {
                 if btn.is_active() {
@@ -368,7 +320,8 @@ impl StatusBar {
     }
 
     pub fn set_coordinates(&self, x: f64, y: f64) {
-        self.coordinates_label.set_text(&format!("({:.0}, {:.0})", x, y));
+        self.coordinates_label
+            .set_text(&format!("({:.0}, {:.0})", x, y));
     }
 
     pub fn clear_coordinates(&self) {
@@ -395,7 +348,7 @@ pub fn load_css() {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border-radius: 12px;
         }
-        
+
         .capture-button {
             font-size: 16px;
             font-weight: bold;
@@ -404,32 +357,32 @@ pub fn load_css() {
             transition: all 200ms ease;
             margin: 5px 0;
         }
-        
+
         .capture-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
-        
+
         .capture-button:not(.suggested-action) {
             background: #3498db;
             color: white;
         }
-        
+
         .capture-button:not(.suggested-action):hover {
             background: #2980b9;
         }
-        
+
         .capture-title {
             font-size: 24px;
             font-weight: bold;
             color: #2c3e50;
         }
-        
+
         .capture-description {
             font-size: 14px;
             color: #7f8c8d;
         }
-        
+
         /* Editor Interface Styling */
         .toolbar {
             background-color: @theme_bg_color;
@@ -437,7 +390,7 @@ pub fn load_css() {
             padding: 6px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
-        
+
         .statusbar {
             background-color: @theme_bg_color;
             border-top: 1px solid @borders;
@@ -445,12 +398,12 @@ pub fn load_css() {
             font-size: 0.9em;
             font-family: monospace;
         }
-        
+
         .drawing-area {
             background-color: #f8f9fa;
             border: 1px solid #dee2e6;
         }
-        
+
         .tool-button {
             min-width: 50px;
             min-height: 40px;
@@ -459,64 +412,64 @@ pub fn load_css() {
             border-radius: 6px;
             font-size: 16px;
         }
-        
+
         .tool-button:checked {
             background: @accent_color;
             color: @accent_fg_color;
         }
-        
+
         button {
             min-width: 60px;
             padding: 6px 12px;
             border-radius: 6px;
             transition: all 150ms ease;
         }
-        
+
         button:hover {
             transform: translateY(-1px);
         }
-        
+
         .destructive-action {
             background: #e74c3c;
             color: white;
         }
-        
+
         .destructive-action:hover {
             background: #c0392b;
         }
-        
+
         .suggested-action {
             background: #27ae60;
             color: white;
             font-weight: bold;
         }
-        
+
         .suggested-action:hover {
             background: #229954;
         }
-        
+
         scale {
             min-width: 100px;
         }
-        
+
         combobox {
             min-width: 80px;
             padding: 4px 8px;
         }
-        
+
         /* Animations */
         @keyframes fade-in {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        
+
         .fade-in {
             animation: fade-in 300ms ease-out;
         }
     "#;
-    
+
     provider.load_from_data(css);
-    
+
     gtk4::style_context_add_provider_for_display(
         &gdk4::Display::default().expect("Could not connect to a display."),
         &provider,
