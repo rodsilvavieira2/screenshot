@@ -232,8 +232,7 @@ impl X11WindowManager {
     fn capture_window(&self, window_id: u64) -> Result<Vec<u8>> {
         #[cfg(feature = "x11")]
         {
-            use x11rb::connection::Connection;
-            use x11rb::protocol::xproto::*;
+            use x11rb::protocol::xproto::{ConnectionExt, ImageFormat};
 
             let conn = self
                 .connection
@@ -243,27 +242,95 @@ impl X11WindowManager {
 
             // Get window geometry
             let geom_reply = conn.get_geometry(window_id)?.reply()?;
-
-            // Translate coordinates to root window
-            let translate_reply = conn
-                .translate_coordinates(window_id, conn.setup().roots[0].root, 0, 0)?
-                .reply()?;
-
-            let x = translate_reply.dst_x;
-            let y = translate_reply.dst_y;
             let width = geom_reply.width;
             let height = geom_reply.height;
 
-            info!("Capturing window {}x{} at ({}, {})", width, height, x, y);
+            info!("Capturing window directly: {}x{}", width, height);
 
-            // Use the existing screenshot functionality with region capture
-            let capture = crate::capture::ScreenshotCapture::new();
-            capture.take_screenshot_region_blocking(x as i32, y as i32, width as i32, height as i32)
+            // Capture the window image directly using X11
+            let image_reply = conn
+                .get_image(
+                    ImageFormat::Z_PIXMAP,
+                    window_id,
+                    0,
+                    0,
+                    width,
+                    height,
+                    u32::MAX,
+                )?
+                .reply()?;
+
+            let image_data = image_reply.data;
+            let depth = image_reply.depth;
+
+            info!(
+                "Got window image: {}x{}, depth: {}, data length: {}",
+                width,
+                height,
+                depth,
+                image_data.len()
+            );
+
+            // Convert X11 image data to PNG
+            self.convert_x11_image_to_png(&image_data, width as u32, height as u32, depth)
         }
         #[cfg(not(feature = "x11"))]
         {
             Err(anyhow!("X11 support not compiled in"))
         }
+    }
+
+    #[cfg(feature = "x11")]
+    fn convert_x11_image_to_png(
+        &self,
+        image_data: &[u8],
+        width: u32,
+        height: u32,
+        depth: u8,
+    ) -> Result<Vec<u8>> {
+        use image::{ImageBuffer, Rgba};
+
+        info!(
+            "Converting X11 image to PNG: {}x{}, depth: {}",
+            width, height, depth
+        );
+
+        let mut rgba_data = Vec::with_capacity((width * height * 4) as usize);
+
+        if depth == 24 || depth == 32 {
+            // Handle 24-bit or 32-bit color depth
+            let bytes_per_pixel = if depth == 24 { 4 } else { 4 }; // X11 typically uses 4 bytes even for 24-bit
+
+            for chunk in image_data.chunks_exact(bytes_per_pixel) {
+                if chunk.len() >= 3 {
+                    // X11 typically stores as BGRA or BGRx
+                    let b = chunk[0];
+                    let g = chunk[1];
+                    let r = chunk[2];
+                    let a = if chunk.len() >= 4 { chunk[3] } else { 255 };
+
+                    rgba_data.extend_from_slice(&[r, g, b, a]);
+                }
+            }
+        } else {
+            return Err(anyhow!("Unsupported color depth: {}", depth));
+        }
+
+        // Create RGBA image
+        let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_raw(width, height, rgba_data)
+                .ok_or_else(|| anyhow!("Failed to create image buffer from RGBA data"))?;
+
+        // Convert to PNG
+        let mut buffer = Vec::new();
+        img.write_to(
+            &mut std::io::Cursor::new(&mut buffer),
+            image::ImageFormat::Png,
+        )
+        .map_err(|e| anyhow!("Failed to convert to PNG: {}", e))?;
+
+        info!("Successfully converted to PNG: {} bytes", buffer.len());
+        Ok(buffer)
     }
 }
 
