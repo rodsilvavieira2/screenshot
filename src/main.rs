@@ -101,14 +101,7 @@ fn build_capture_ui(app: &Application) {
         start_screenshot_capture(app_clone2.clone(), window_clone2.clone(), true);
     });
 
-    // Add a quit button
-    let quit_button = Button::with_label("❌ Quit");
-    quit_button.set_margin_top(10);
-
     let window_for_quit = window.clone();
-    quit_button.connect_clicked(move |_| {
-        window_for_quit.close();
-    });
 
     // Keyboard shortcuts
     let key_controller = gtk4::EventControllerKey::new();
