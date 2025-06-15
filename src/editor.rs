@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use arboard::Clipboard;
 use cairo::{Context, Format, ImageSurface};
 use gdk4::ModifierType;
 use gtk4::prelude::*;
@@ -725,8 +726,7 @@ impl AnnotationEditor {
         // Finish all drawing operations
         drop(ctx);
 
-        // Save to temp file using the same conversion approach
-        let temp_path = "/tmp/flint_screenshot.png";
+        // Convert surface to PNG image data
         let image_data = {
             surface.flush();
             let stride = surface.stride();
@@ -754,89 +754,21 @@ impl AnnotationEditor {
             rgba_data
         };
 
-        let img = image::RgbaImage::from_raw(image_width as u32, image_height as u32, image_data)
-            .ok_or_else(|| anyhow!("Failed to create image from data"))?;
-        img.save(&temp_path)?;
+        // Copy to clipboard using arboard
+        let mut clipboard =
+            Clipboard::new().map_err(|e| anyhow!("Failed to access clipboard: {}", e))?;
 
-        // Try to copy to clipboard using system tools
-        match std::process::Command::new("xclip")
-            .args(&[
-                "-selection",
-                "clipboard",
-                "-t",
-                "image/png",
-                "-i",
-                &temp_path,
-            ])
-            .output()
-        {
-            Ok(output) => {
-                if output.status.success() {
-                    info!("Successfully copied to clipboard using xclip");
-                } else {
-                    warn!("xclip failed, trying wl-copy");
-                    // Try wl-copy for Wayland
-                    match std::process::Command::new("wl-copy")
-                        .args(&["--type", "image/png"])
-                        .stdin(std::process::Stdio::piped())
-                        .spawn()
-                        .and_then(|mut child| {
-                            use std::io::Write;
-                            if let Some(stdin) = child.stdin.as_mut() {
-                                stdin.write_all(&std::fs::read(&temp_path)?)?;
-                            }
-                            child.wait()
-                        }) {
-                        Ok(status) => {
-                            if status.success() {
-                                info!("Successfully copied to clipboard using wl-copy");
-                            } else {
-                                warn!("wl-copy also failed, image saved to {}", temp_path);
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Failed to use wl-copy: {}, image saved to {}", e, temp_path);
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                warn!("xclip not available: {}, trying wl-copy", e);
-                // Try wl-copy for Wayland
-                match std::process::Command::new("wl-copy")
-                    .args(&["--type", "image/png"])
-                    .stdin(std::process::Stdio::piped())
-                    .spawn()
-                    .and_then(|mut child| {
-                        use std::io::Write;
-                        if let Some(stdin) = child.stdin.as_mut() {
-                            stdin.write_all(&std::fs::read(&temp_path)?)?;
-                        }
-                        child.wait()
-                    }) {
-                    Ok(status) => {
-                        if status.success() {
-                            info!("Successfully copied to clipboard using wl-copy");
-                        } else {
-                            warn!("wl-copy failed, image saved to {}", temp_path);
-                        }
-                    }
-                    Err(e) => {
-                        warn!(
-                            "No clipboard tools available: {}, image saved to {}",
-                            e, temp_path
-                        );
-                    }
-                }
-            }
-        }
+        let img_data = arboard::ImageData {
+            width: image_width as usize,
+            height: image_height as usize,
+            bytes: std::borrow::Cow::Borrowed(&image_data),
+        };
 
-        // Clean up temp file after a delay
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_secs(5));
-            let _ = std::fs::remove_file(temp_path);
-        });
+        clipboard
+            .set_image(img_data)
+            .map_err(|e| anyhow!("Failed to set clipboard image: {}", e))?;
 
+        info!("Successfully copied image to clipboard using arboard");
         Ok(())
     }
 }
