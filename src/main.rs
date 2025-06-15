@@ -72,11 +72,6 @@ fn build_capture_ui(app: &Application) {
     let desc_label = Label::new(Some("Capture and annotate screenshots"));
     desc_label.set_margin_bottom(10);
 
-    // Instruction label
-    let instruction_label = Label::new(Some("Choose full screen or drag to select rectangle area"));
-    instruction_label.set_margin_bottom(20);
-    instruction_label.set_markup("<small><i>Rectangle mode: Click and drag to select area, press Escape to cancel</i></small>");
-
     // Capture buttons container
     let button_box = Box::new(Orientation::Vertical, 10);
 
@@ -159,7 +154,6 @@ fn build_capture_ui(app: &Application) {
     // Add widgets to container
     main_box.append(&title_label);
     main_box.append(&desc_label);
-    main_box.append(&instruction_label);
     main_box.append(&button_box);
     main_box.append(&quit_button);
 
