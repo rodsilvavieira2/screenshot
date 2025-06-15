@@ -76,12 +76,11 @@ fn build_capture_ui(app: &Application) {
     let button_box = Box::new(Orientation::Vertical, 10);
 
     // Full screenshot button
-    let capture_button = Button::with_label("📷 Take Full Screenshot");
+    let capture_button = Button::with_label("Screen");
     capture_button.set_size_request(200, 50);
-    capture_button.add_css_class("suggested-action");
 
     // Rectangle selection button
-    let rect_button = Button::with_label("🔲 Select Rectangle Area");
+    let rect_button = Button::with_label("Selction");
     rect_button.set_size_request(200, 50);
 
     // Clone app for the callbacks
@@ -186,7 +185,8 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
     glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
         // Now capture the actual current screen state for preview (without the capture UI)
         let screen_info = get_screen_info_without_capture();
-        let (preview_surface, original_png_data) = capture_current_screen_for_preview_with_data(screen_info.0, screen_info.1);
+        let (preview_surface, original_png_data) =
+            capture_current_screen_for_preview_with_data(screen_info.0, screen_info.1);
 
         // Create fullscreen overlay window for rectangle selection
         let overlay_window = ApplicationWindow::builder()
@@ -407,7 +407,7 @@ fn show_rectangle_selection(app: Application, parent_window: ApplicationWindow) 
                     if w > 10 && h > 10 {
                         // Minimum size check
                         overlay_window_release.close();
-                        
+
                         // Use the stored PNG data and crop it directly
                         if let Some(ref png_data) = original_png_data_release {
                             match crop_png_data_direct(png_data, x, y, w, h) {
@@ -605,7 +605,10 @@ fn show_error_dialog(parent: &ApplicationWindow, message: &str) {
     dialog.present();
 }
 
-fn capture_current_screen_for_preview_with_data(width: i32, height: i32) -> (cairo::ImageSurface, Option<Vec<u8>>) {
+fn capture_current_screen_for_preview_with_data(
+    width: i32,
+    height: i32,
+) -> (cairo::ImageSurface, Option<Vec<u8>>) {
     info!("Attempting to capture current screen state for preview with original data");
 
     // Longer delay to ensure capture UI window is completely hidden
@@ -767,9 +770,18 @@ fn create_screen_preview_pattern(width: i32, height: i32) -> cairo::ImageSurface
     surface
 }
 
-fn crop_png_data_direct(png_data: &[u8], x: i32, y: i32, width: i32, height: i32) -> Result<Vec<u8>> {
-    info!("Cropping PNG data directly: {}x{} at ({}, {})", width, height, x, y);
-    
+fn crop_png_data_direct(
+    png_data: &[u8],
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+) -> Result<Vec<u8>> {
+    info!(
+        "Cropping PNG data directly: {}x{} at ({}, {})",
+        width, height, x, y
+    );
+
     // Load the image from PNG bytes
     let image = image::load_from_memory(png_data)
         .map_err(|e| anyhow::anyhow!("Failed to load image for cropping: {}", e))?;
@@ -809,7 +821,10 @@ fn crop_png_data_direct(png_data: &[u8], x: i32, y: i32, width: i32, height: i32
 }
 
 fn proceed_with_cropped_screenshot(app: Application, window: ApplicationWindow, png_data: Vec<u8>) {
-    info!("Opening editor with cropped screenshot ({} bytes)", png_data.len());
+    info!(
+        "Opening editor with cropped screenshot ({} bytes)",
+        png_data.len()
+    );
 
     // Close the capture window
     window.close();
