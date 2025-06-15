@@ -568,6 +568,7 @@ impl AnnotationEditor {
             if response == ResponseType::Accept {
                 if let Some(file) = dialog.file() {
                     if let Some(path) = file.path() {
+                        info!("Attempting to save to: {}", path.display());
                         match Self::render_to_file_static(
                             &path,
                             &screenshot_surface_clone,
@@ -578,15 +579,23 @@ impl AnnotationEditor {
                             Ok(_) => {
                                 status_bar_clone
                                     .set_status(&format!("Saved to {}", path.display()));
-                                info!("Screenshot saved to: {}", path.display());
+                                info!("Screenshot saved successfully to: {}", path.display());
                             }
                             Err(e) => {
-                                error!("Failed to save file: {}", e);
-                                status_bar_clone.set_status("Error saving file");
+                                error!("Failed to save file to {}: {}", path.display(), e);
+                                status_bar_clone.set_status(&format!("Error saving file: {}", e));
                             }
                         }
+                    } else {
+                        error!("No path selected for save");
+                        status_bar_clone.set_status("Error: No path selected");
                     }
+                } else {
+                    error!("No file selected for save");
+                    status_bar_clone.set_status("Error: No file selected");
                 }
+            } else {
+                info!("Save dialog cancelled");
             }
             dialog.close();
         });
@@ -620,28 +629,76 @@ impl AnnotationEditor {
         image_width: i32,
         image_height: i32,
     ) -> Result<()> {
-        let mut surface = ImageSurface::create(Format::ARgb32, image_width, image_height)?;
+        let path_ref = path.as_ref();
+        info!("Creating render surface {}x{}", image_width, image_height);
 
-        let ctx = Context::new(&surface)?;
+        let mut surface = ImageSurface::create(Format::ARgb32, image_width, image_height)
+            .map_err(|e| anyhow!("Failed to create surface: {}", e))?;
+
+        let ctx = Context::new(&surface).map_err(|e| anyhow!("Failed to create context: {}", e))?;
 
         // Draw screenshot
         if let Some(ref screenshot) = *screenshot_surface.borrow() {
-            ctx.set_source_surface(screenshot, 0.0, 0.0)?;
-            ctx.paint()?;
+            info!("Drawing screenshot to surface");
+            ctx.set_source_surface(screenshot, 0.0, 0.0)
+                .map_err(|e| anyhow!("Failed to set source surface: {}", e))?;
+            ctx.paint()
+                .map_err(|e| anyhow!("Failed to paint surface: {}", e))?;
+        } else {
+            warn!("No screenshot surface available for saving");
         }
 
         // Draw annotations
+        info!("Drawing annotations to surface");
         tools.borrow().draw_all(&ctx);
 
-        // Convert to PNG and save
-        let data = surface.data()?;
-        let image_data = Self::argb_to_rgba_static(&data, image_width, image_height);
+        // Finish all drawing operations
+        drop(ctx);
 
+        // Convert to image data using a safer approach without exclusive access
+        info!("Converting surface to image data");
+        let image_data = {
+            surface.flush();
+            let stride = surface.stride();
+            let width = surface.width();
+            let height = surface.height();
+
+            // Create a new vector to hold the converted data
+            let mut rgba_data = Vec::new();
+
+            // Process the surface data in chunks to avoid exclusive access issues
+            unsafe {
+                let data_ptr = surface.data().unwrap().as_ptr();
+                for y in 0..height {
+                    for x in 0..width {
+                        let pixel_offset = (y * stride + x * 4) as isize;
+                        let pixel_ptr = data_ptr.offset(pixel_offset);
+
+                        // Cairo ARGB format is BGRA on little-endian
+                        let b = *pixel_ptr;
+                        let g = *pixel_ptr.offset(1);
+                        let r = *pixel_ptr.offset(2);
+                        let a = *pixel_ptr.offset(3);
+
+                        rgba_data.extend_from_slice(&[r, g, b, a]);
+                    }
+                }
+            }
+            rgba_data
+        };
+
+        info!(
+            "Creating image from converted data: {}x{}",
+            image_width, image_height
+        );
         let img = image::RgbaImage::from_raw(image_width as u32, image_height as u32, image_data)
-            .ok_or_else(|| anyhow!("Failed to create image from data"))?;
+            .ok_or_else(|| anyhow!("Failed to create image from converted data"))?;
 
-        img.save(path)?;
+        info!("Saving image to file: {}", path_ref.display());
+        img.save(path_ref)
+            .map_err(|e| anyhow!("Failed to save image to {}: {}", path_ref.display(), e))?;
 
+        info!("File saved successfully to: {}", path_ref.display());
         Ok(())
     }
 
@@ -665,39 +722,121 @@ impl AnnotationEditor {
         // Draw annotations
         tools.borrow().draw_all(&ctx);
 
-        // Convert to image data
-        let data = surface.data()?;
-        let image_data = Self::argb_to_rgba_static(&data, image_width, image_height);
+        // Finish all drawing operations
+        drop(ctx);
 
-        // Create image and save to temp file for clipboard
+        // Save to temp file using the same conversion approach
+        let temp_path = "/tmp/flint_screenshot.png";
+        let image_data = {
+            surface.flush();
+            let stride = surface.stride();
+            let width = surface.width();
+            let height = surface.height();
+
+            let mut rgba_data = Vec::new();
+
+            unsafe {
+                let data_ptr = surface.data().unwrap().as_ptr();
+                for y in 0..height {
+                    for x in 0..width {
+                        let pixel_offset = (y * stride + x * 4) as isize;
+                        let pixel_ptr = data_ptr.offset(pixel_offset);
+
+                        let b = *pixel_ptr;
+                        let g = *pixel_ptr.offset(1);
+                        let r = *pixel_ptr.offset(2);
+                        let a = *pixel_ptr.offset(3);
+
+                        rgba_data.extend_from_slice(&[r, g, b, a]);
+                    }
+                }
+            }
+            rgba_data
+        };
+
         let img = image::RgbaImage::from_raw(image_width as u32, image_height as u32, image_data)
             .ok_or_else(|| anyhow!("Failed to create image from data"))?;
+        img.save(&temp_path)?;
 
-        // Save to temp file for clipboard
-        let temp_path = "/tmp/flint_screenshot.png";
-        img.save(temp_path)?;
-
-        warn!(
-            "Image clipboard not fully implemented - saved to {}",
-            temp_path
-        );
-
-        Ok(())
-    }
-
-    fn argb_to_rgba_static(argb_data: &[u8], width: i32, height: i32) -> Vec<u8> {
-        let mut rgba_data = Vec::with_capacity((width * height * 4) as usize);
-
-        for chunk in argb_data.chunks_exact(4) {
-            // ARGB -> RGBA conversion
-            let a = chunk[0];
-            let r = chunk[1];
-            let g = chunk[2];
-            let b = chunk[3];
-
-            rgba_data.extend_from_slice(&[r, g, b, a]);
+        // Try to copy to clipboard using system tools
+        match std::process::Command::new("xclip")
+            .args(&[
+                "-selection",
+                "clipboard",
+                "-t",
+                "image/png",
+                "-i",
+                &temp_path,
+            ])
+            .output()
+        {
+            Ok(output) => {
+                if output.status.success() {
+                    info!("Successfully copied to clipboard using xclip");
+                } else {
+                    warn!("xclip failed, trying wl-copy");
+                    // Try wl-copy for Wayland
+                    match std::process::Command::new("wl-copy")
+                        .args(&["--type", "image/png"])
+                        .stdin(std::process::Stdio::piped())
+                        .spawn()
+                        .and_then(|mut child| {
+                            use std::io::Write;
+                            if let Some(stdin) = child.stdin.as_mut() {
+                                stdin.write_all(&std::fs::read(&temp_path)?)?;
+                            }
+                            child.wait()
+                        }) {
+                        Ok(status) => {
+                            if status.success() {
+                                info!("Successfully copied to clipboard using wl-copy");
+                            } else {
+                                warn!("wl-copy also failed, image saved to {}", temp_path);
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to use wl-copy: {}, image saved to {}", e, temp_path);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("xclip not available: {}, trying wl-copy", e);
+                // Try wl-copy for Wayland
+                match std::process::Command::new("wl-copy")
+                    .args(&["--type", "image/png"])
+                    .stdin(std::process::Stdio::piped())
+                    .spawn()
+                    .and_then(|mut child| {
+                        use std::io::Write;
+                        if let Some(stdin) = child.stdin.as_mut() {
+                            stdin.write_all(&std::fs::read(&temp_path)?)?;
+                        }
+                        child.wait()
+                    }) {
+                    Ok(status) => {
+                        if status.success() {
+                            info!("Successfully copied to clipboard using wl-copy");
+                        } else {
+                            warn!("wl-copy failed, image saved to {}", temp_path);
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            "No clipboard tools available: {}, image saved to {}",
+                            e, temp_path
+                        );
+                    }
+                }
+            }
         }
 
-        rgba_data
+        // Clean up temp file after a delay
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            let _ = std::fs::remove_file(temp_path);
+        });
+
+        Ok(())
     }
 }
