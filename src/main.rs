@@ -4,8 +4,8 @@ use gdk4;
 use gtk4::pango;
 use gtk4::prelude::*;
 use gtk4::{
-    glib, Application, ApplicationWindow, Box, Button, DrawingArea, Label, ListBox, Orientation,
-    PolicyType, ScrolledWindow, SelectionMode,
+    glib, Application, ApplicationWindow, Box, Button, DrawingArea, Label, ListBox, ListBoxRow,
+    Orientation, PolicyType, ScrolledWindow, SelectionMode,
 };
 use image::GenericImageView;
 use log::{error, info};
@@ -28,24 +28,11 @@ const APP_ID: &str = "com.flint.Screenshot";
 fn main() -> Result<()> {
     env_logger::init();
 
-    info!("Starting Flint Screenshot Tool v1.0.0");
-
-    // Check for test mode
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() > 1 && args[1] == "--test" {
-        println!("🔥 Flint Screenshot Tool - Test Mode");
-        println!("✅ GTK4 libraries loaded successfully");
-        println!("✅ Application can start");
-        println!("✅ Screenshot capture module available");
-        println!("Use 'cargo run' to start the full application");
-        return Ok(());
-    }
-
     let app = Application::builder().application_id(APP_ID).build();
 
     app.connect_activate(build_capture_ui);
 
-    let exit_code = app.run_with_args(&args);
+    let exit_code = app.run();
 
     std::process::exit(exit_code.into());
 }
@@ -932,8 +919,12 @@ fn show_window_selection_dialog(
 
     // Populate list with windows
     for window_info in &windows {
-        let row = create_window_list_row(window_info);
-        list_box.append(&row);
+        let row_widget = create_window_list_row(window_info);
+        let list_row = ListBoxRow::new();
+        list_row.set_child(Some(&row_widget));
+        list_row.set_activatable(true);
+        list_row.set_selectable(true);
+        list_box.append(&list_row);
     }
 
     scrolled.set_child(Some(&list_box));
@@ -957,10 +948,45 @@ fn show_window_selection_dialog(
     capture_button.add_css_class("suggested-action");
     capture_button.set_sensitive(false); // Initially disabled
 
+    // Create shared reference to window manager for all callbacks
+    let window_manager_clone = std::rc::Rc::new(window_manager);
+
     // Enable capture button when selection changes
     let capture_button_clone = capture_button.clone();
     list_box.connect_row_selected(move |_, row| {
-        capture_button_clone.set_sensitive(row.is_some());
+        let is_selected = row.is_some();
+        capture_button_clone.set_sensitive(is_selected);
+        if is_selected {
+            info!("Window row selected, capture button enabled");
+        }
+    });
+
+    // Add double-click activation for immediate capture
+    let dialog_clone_activate = dialog.clone();
+    let parent_clone_activate = parent_window.clone();
+    let app_clone_activate = app.clone();
+    let windows_clone_activate = windows.clone();
+    let window_manager_activate = window_manager_clone.clone();
+
+    list_box.connect_row_activated(move |_, activated_row| {
+        let window_index = activated_row.index() as usize;
+        if let Some(window_info) = windows_clone_activate.get(window_index) {
+            info!(
+                "Window row activated (double-clicked): {} (ID: {})",
+                window_info.title, window_info.id
+            );
+
+            // Close the dialog
+            dialog_clone_activate.close();
+
+            // Start window capture immediately
+            proceed_with_window_capture(
+                app_clone_activate.clone(),
+                parent_clone_activate.clone(),
+                window_info.id,
+                window_manager_activate.as_ref(),
+            );
+        }
     });
 
     // Handle capture button click
@@ -969,6 +995,8 @@ fn show_window_selection_dialog(
     let app_clone = app.clone();
     let list_box_clone = list_box.clone();
     let windows_clone = windows.clone();
+    let window_manager_capture = window_manager_clone.clone();
+
     capture_button.connect_clicked(move |_| {
         if let Some(selected_row) = list_box_clone.selected_row() {
             let window_index = selected_row.index() as usize;
@@ -986,9 +1014,13 @@ fn show_window_selection_dialog(
                     app_clone.clone(),
                     parent_clone.clone(),
                     window_info.id,
-                    &window_manager,
+                    window_manager_capture.as_ref(),
                 );
+            } else {
+                error!("Failed to get window info for index: {}", window_index);
             }
+        } else {
+            error!("No window selected");
         }
     });
 
@@ -1030,26 +1062,41 @@ fn create_window_list_row(window_info: &window_manager::WindowInfo) -> Box {
     title_label.set_halign(gtk4::Align::Start);
     title_label.add_css_class("heading");
     title_label.set_ellipsize(pango::EllipsizeMode::End);
+    title_label.set_max_width_chars(50);
 
     // Sanitize window class and create details
     let sanitized_class = window_info.class.replace('\0', "");
     let details = if !sanitized_class.is_empty() && sanitized_class != "Unknown" {
         format!(
-            "{} • {}×{}",
-            sanitized_class, window_info.width, window_info.height
+            "{} • {}×{} • ID: {}",
+            sanitized_class, window_info.width, window_info.height, window_info.id
         )
     } else {
-        format!("{}×{}", window_info.width, window_info.height)
+        format!(
+            "{}×{} • ID: {}",
+            window_info.width, window_info.height, window_info.id
+        )
     };
 
     let details_label = Label::new(Some(&details));
     details_label.set_halign(gtk4::Align::Start);
     details_label.add_css_class("dim-label");
     details_label.add_css_class("caption");
+    details_label.set_ellipsize(pango::EllipsizeMode::End);
 
     info_box.append(&title_label);
     info_box.append(&details_label);
 
+    // Add window icon placeholder
+    let icon_box = Box::new(Orientation::Vertical, 0);
+    icon_box.set_valign(gtk4::Align::Center);
+    icon_box.set_size_request(32, 32);
+
+    let icon_label = Label::new(Some("🪟"));
+    icon_label.add_css_class("title-1");
+    icon_box.append(&icon_label);
+
+    row_box.append(&icon_box);
     row_box.append(&info_box);
 
     row_box
@@ -1066,10 +1113,7 @@ fn proceed_with_window_capture(
         window_id
     );
 
-    // Add delay to ensure dialog is closed
-    std::thread::sleep(std::time::Duration::from_millis(200));
-
-    // Capture the window
+    // Capture the window immediately - no need for async delay
     match window_manager.capture_window(window_id) {
         Ok(png_data) => {
             info!("Window captured successfully, {} bytes", png_data.len());
@@ -1092,7 +1136,7 @@ fn proceed_with_window_capture(
         }
         Err(e) => {
             error!("Failed to capture window: {}", e);
-            show_error_dialog(&parent_window, &format!("Failed to capture window: {}", e));
+            show_error_dialog(&parent_window, &format!("Failed to capture window: {}\n\nTip: Make sure the target window is visible and not minimized.", e));
             parent_window.set_visible(true);
         }
     }
