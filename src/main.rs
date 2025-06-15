@@ -101,8 +101,6 @@ fn build_capture_ui(app: &Application) {
         start_screenshot_capture(app_clone2.clone(), window_clone2.clone(), true);
     });
 
-    let window_for_quit = window.clone();
-
     // Keyboard shortcuts
     let key_controller = gtk4::EventControllerKey::new();
     key_controller.connect_key_pressed(glib::clone!(@weak window => @default-return glib::Propagation::Proceed, move |_, key, _, _| {
@@ -147,7 +145,6 @@ fn build_capture_ui(app: &Application) {
     main_box.append(&title_label);
     main_box.append(&desc_label);
     main_box.append(&button_box);
-    main_box.append(&quit_button);
 
     window.set_child(Some(&main_box));
 
