@@ -6,8 +6,6 @@ pub struct WindowInfo {
     pub id: u64,
     pub title: String,
     pub class: String,
-    pub x: i32,
-    pub y: i32,
     pub width: u32,
     pub height: u32,
     pub is_minimized: bool,
@@ -158,8 +156,6 @@ impl X11WindowManager {
             id: window_id as u64,
             title,
             class,
-            x: geom_reply.x as i32,
-            y: geom_reply.y as i32,
             width: geom_reply.width as u32,
             height: geom_reply.height as u32,
             is_minimized: false, // We already filtered out non-viewable windows
