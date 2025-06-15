@@ -24,13 +24,11 @@ impl Toolbar {
         widget.set_margin_end(6);
         widget.set_margin_top(6);
         widget.set_margin_bottom(6);
-        widget.add_css_class("toolbar");
 
         let current_tool = Rc::new(RefCell::new(ToolType::Pencil));
 
         // Tool selection buttons
         let tool_box = Box::new(Orientation::Horizontal, 2);
-        tool_box.add_css_class("linked");
 
         let tool_buttons = Self::create_tool_buttons(&tool_box, current_tool.clone());
 
@@ -294,7 +292,6 @@ impl StatusBar {
         widget.set_margin_end(6);
         widget.set_margin_top(3);
         widget.set_margin_bottom(3);
-        widget.add_css_class("statusbar");
 
         let status_label = Label::new(Some("Ready"));
         status_label.set_halign(gtk4::Align::Start);
@@ -335,174 +332,4 @@ impl Default for StatusBar {
     fn default() -> Self {
         Self::new()
     }
-}
-
-// Helper function to load CSS for styling
-pub fn load_css() {
-    let provider = gtk4::CssProvider::new();
-    let css = r#"
-        /* Capture Interface Styling */
-        .capture-window {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 12px;
-        }
-
-        .capture-button {
-            font-size: 16px;
-            font-weight: bold;
-            padding: 12px 24px;
-            border-radius: 8px;
-            transition: all 200ms ease;
-            margin: 5px 0;
-        }
-
-        .capture-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-
-        .capture-button:not(.suggested-action) {
-            background: #3498db;
-            color: white;
-        }
-
-        .capture-button:not(.suggested-action):hover {
-            background: #2980b9;
-        }
-
-        .capture-title {
-            font-size: 24px;
-            font-weight: bold;
-            color: #2c3e50;
-        }
-
-        .capture-description {
-            font-size: 14px;
-            color: #7f8c8d;
-        }
-
-        /* Editor Interface Styling */
-        .toolbar {
-            background-color: #2c3136; /* Dark theme toolbar */
-            border-bottom: 1px solid #3c4043;
-            padding: 6px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-            color: #e8eaed; /* Light text for dark background */
-        }
-
-        .statusbar {
-            background-color: #2c3136; /* Match toolbar */
-            border-top: 1px solid #3c4043;
-            padding: 3px;
-            font-size: 0.9em;
-            font-family: monospace;
-            color: #e8eaed; /* Light text for dark background */
-        }
-
-        .drawing-area {
-            background-color: #262D35; /* Dark blue-gray to match the Cairo background */
-            border: 1px solid #3c4043; /* Darker border for better contrast */
-        }
-
-        .tool-button {
-            min-width: 50px;
-            min-height: 40px;
-            padding: 8px;
-            margin: 2px;
-            border-radius: 6px;
-            font-size: 16px;
-            background-color: #3c4043; /* Dark button background */
-            color: #e8eaed; /* Light text */
-            border: 1px solid #5f6368;
-        }
-
-        .tool-button:checked {
-            background: #1976d2; /* Blue accent for selected tool */
-            color: white;
-            border: 1px solid #1565c0;
-        }
-
-        button {
-            min-width: 60px;
-            padding: 6px 12px;
-            border-radius: 6px;
-            transition: all 150ms ease;
-            background-color: #3c4043; /* Dark theme button */
-            color: #e8eaed; /* Light text */
-            border: 1px solid #5f6368;
-        }
-
-        button:hover {
-            transform: translateY(-1px);
-            background-color: #4c5257; /* Lighter on hover */
-        }
-
-        .destructive-action {
-            background: #e74c3c;
-            color: white;
-        }
-
-        .destructive-action:hover {
-            background: #c0392b;
-        }
-
-        .suggested-action {
-            background: #27ae60;
-            color: white;
-            font-weight: bold;
-        }
-
-        .suggested-action:hover {
-            background: #229954;
-        }
-
-        scale {
-            min-width: 100px;
-        }
-
-        combobox {
-            min-width: 80px;
-            padding: 4px 8px;
-        }
-
-        /* Animations */
-        @keyframes fade-in {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .fade-in {
-            animation: fade-in 300ms ease-out;
-        }
-
-        /* Transparent overlay for rectangle selection */
-        .selection-overlay {
-            background-color: transparent;
-        }
-
-        .transparent-area {
-            background-color: transparent;
-        }
-
-        .selection-overlay, .selection-overlay * {
-            background: rgba(0, 0, 0, 0);
-        }
-
-        /* Editor Window Styling */
-        .editor-window {
-            background-color: #1e2124; /* Dark background for the window */
-        }
-
-        .editor-main-box {
-            background-color: #2c3136; /* Slightly lighter for the main container */
-        }
-    "#;
-
-    provider.load_from_data(css);
-
-    gtk4::style_context_add_provider_for_display(
-        &gdk4::Display::default().expect("Could not connect to a display."),
-        &provider,
-        gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
-    );
 }

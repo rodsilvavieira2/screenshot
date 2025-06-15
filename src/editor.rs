@@ -12,7 +12,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use crate::tools::{AnnotationTools, Point};
-use crate::ui::{load_css, StatusBar, Toolbar};
+use crate::ui::{StatusBar, Toolbar};
 
 fn get_screen_dimensions() -> (i32, i32) {
     // Get screen dimensions using GDK
@@ -46,9 +46,6 @@ pub struct AnnotationEditor {
 
 impl AnnotationEditor {
     pub fn new(app: &Application, image_data: Vec<u8>) -> Result<Self> {
-        // Load CSS
-        load_css();
-
         // Get screen dimensions to calculate window size
         let (screen_width, screen_height) = get_screen_dimensions();
         let window_width = screen_width / 2;
@@ -63,9 +60,6 @@ impl AnnotationEditor {
             .resizable(true)
             .build();
 
-        // Add CSS class for styling
-        window.add_css_class("editor-window");
-
         // Load the screenshot image
         let screenshot_surface = Rc::new(RefCell::new(None));
         let (image_width, image_height) =
@@ -77,14 +71,12 @@ impl AnnotationEditor {
 
         // Create UI components
         let main_box = Box::new(Orientation::Vertical, 0);
-        main_box.add_css_class("editor-main-box");
 
         // Create drawing area first so we can pass it to toolbar
         let drawing_area = DrawingArea::new();
         // Don't set fixed size request - let it scale with the window
         drawing_area.set_hexpand(true);
         drawing_area.set_vexpand(true);
-        drawing_area.add_css_class("drawing-area");
 
         info!(
             "Drawing area created with size: {}x{}",

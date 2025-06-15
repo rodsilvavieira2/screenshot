@@ -17,7 +17,6 @@ mod ui;
 
 use capture::ScreenshotCapture;
 use editor::AnnotationEditor;
-use ui::load_css;
 
 const APP_ID: &str = "com.flint.Screenshot";
 
@@ -47,9 +46,6 @@ fn main() -> Result<()> {
 }
 
 fn build_capture_ui(app: &Application) {
-    // Load CSS styles
-    load_css();
-
     // Create the main capture window
     let window = ApplicationWindow::builder()
         .application(app)
@@ -70,19 +66,14 @@ fn build_capture_ui(app: &Application) {
 
     // Title label
     let title_label = Label::new(Some("Flint Screenshot Tool"));
-    title_label.add_css_class("title-1");
-    title_label.add_css_class("capture-title");
     title_label.set_margin_bottom(10);
 
     // Description label
     let desc_label = Label::new(Some("Capture and annotate screenshots"));
-    desc_label.add_css_class("dim-label");
-    desc_label.add_css_class("capture-description");
     desc_label.set_margin_bottom(10);
 
     // Instruction label
     let instruction_label = Label::new(Some("Choose full screen or drag to select rectangle area"));
-    instruction_label.add_css_class("dim-label");
     instruction_label.set_margin_bottom(20);
     instruction_label.set_markup("<small><i>Rectangle mode: Click and drag to select area, press Escape to cancel</i></small>");
 
@@ -93,13 +84,10 @@ fn build_capture_ui(app: &Application) {
     let capture_button = Button::with_label("📷 Take Full Screenshot");
     capture_button.set_size_request(200, 50);
     capture_button.add_css_class("suggested-action");
-    capture_button.add_css_class("pill");
-    capture_button.add_css_class("capture-button");
 
     // Rectangle selection button
     let rect_button = Button::with_label("🔲 Select Rectangle Area");
     rect_button.set_size_request(200, 50);
-    rect_button.add_css_class("capture-button");
 
     // Clone app for the callbacks
     let app_clone = app.clone();
@@ -176,7 +164,6 @@ fn build_capture_ui(app: &Application) {
     main_box.append(&quit_button);
 
     window.set_child(Some(&main_box));
-    window.add_css_class("capture-window");
 
     // Show the window
     window.present();
