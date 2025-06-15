@@ -80,7 +80,7 @@ fn build_capture_ui(app: &Application) {
     capture_button.set_size_request(200, 50);
 
     // Rectangle selection button
-    let rect_button = Button::with_label("Selction");
+    let rect_button = Button::with_label("Selection");
     rect_button.set_size_request(200, 50);
 
     // Clone app for the callbacks
