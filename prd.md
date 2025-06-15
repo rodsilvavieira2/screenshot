@@ -41,6 +41,7 @@ There is a clear need for a **natively built, performant, and Wayland-first** ut
 
 * **As a QA engineer, I want to** select a specific region of my screen, **so that I can** highlight a UI bug with a red arrow and save the image to attach to a bug report.
 * **As a user, I want to** take a screenshot and immediately have the option to draw on it, **so that I can** quickly circle important information before sharing it with a colleague.
+* **As a developer, I want to** capture a specific application window without other desktop elements, **so that I can** create clean documentation screenshots for my software.
 * **As a GNOME user on Wayland, I want to** use a screenshot tool that invokes the native OS selection UI, **so that** the experience is consistent, secure, and reliable.
 * **As a developer, I want to** copy my annotated screenshot directly to the clipboard, **so that I can** paste it instantly into a chat application or document without saving a file first.
 
@@ -48,12 +49,15 @@ There is a clear need for a **natively built, performant, and Wayland-first** ut
 
 #### **6.1. Core Functionality: Screenshot Capture**
 
-* **Trigger Mechanism:** The application will be launched to initiate the capture process. On Wayland, this will immediately invoke the xdg-desktop-portal screenshot interface.
-* **Capture Modes (delegated to portal):** The portal will handle the user's choice of:
-  * Full Screen
-  * Specific Window
-  * Custom Region
-* **X11 Fallback:** In an X11 environment where a portal is not available, the screenshots crate will be used to capture the full screen as a fallback. Region selection in X11 is out of scope for v1.0.
+* **Trigger Mechanism:** The application will present a main interface with three capture options: Screen, Selection, and Window.
+* **Capture Modes:**
+  * **Screen:** Captures the entire screen
+  * **Selection:** Allows user to select a rectangular region
+  * **Window:** Presents a list of available windows for the user to select and capture
+* **Platform Support:** 
+  * **X11:** Full functionality including window enumeration and capture
+  * **Wayland:** Screen and Selection modes work via xdg-desktop-portal. Window selection shows an informative error due to Wayland security restrictions
+  * **XWayland Applications:** Can be captured even when running on Wayland
 
 #### **6.2. The Annotation Editor**
 
@@ -78,19 +82,35 @@ There is a clear need for a **natively built, performant, and Wayland-first** ut
 
 | Requirement | Specification |
 | :---- | :---- |
-| **Platform Support** | Linux. Primary target is GNOME on Wayland. |
+| **Platform Support** | Linux. Primary target is GNOME on Wayland with X11 support. |
 | **Architecture** | x86\_64 |
-| **Technology Stack** | Rust, GTK4, ashpd (for portal), Cairo |
+| **Technology Stack** | Rust, GTK4, ashpd (for portal), Cairo, x11rb (for X11 window management), wayland-client |
 | **Performance** | The application must feel responsive and lightweight at all times. No noticeable lag during drawing operations. |
 | **Installation** | The project should be buildable from source via cargo. Future goal is to distribute via Flatpak. |
 
-### **7\. Out of Scope for Version 1.0**
+### **7\. Implementation Status**
 
-To ensure a focused and achievable initial release, the following features will **not** be included in version 1.0:
+#### **7.1. Completed Features (v1.0)**
+
+* ✅ **Window Selection:** Users can select and capture individual application windows
+* ✅ **X11 Window Enumeration:** Full support for listing and capturing windows on X11 systems
+* ✅ **Multi-platform Support:** Graceful handling of Wayland limitations with informative error messages
+* ✅ **Enhanced UI:** Three-button interface (Screen, Selection, Window) for different capture modes
+* ✅ **String Sanitization:** Proper handling of window titles with special characters for GTK compatibility
+
+#### **7.2. Platform-Specific Behavior**
+
+* **X11 Systems:** Full window selection functionality with window enumeration and capture
+* **Wayland Systems:** Screen and Selection modes available; Window selection shows helpful error message directing users to alternative capture methods
+* **XWayland Applications:** Can be captured through X11 backend even when running on Wayland
+
+### **8\. Out of Scope for Future Versions**
+
+To ensure a focused and achievable implementation, the following features are **not** currently planned:
 
 * Video or GIF recording.
 * Direct upload to cloud services (e.g., Imgur).
 * Advanced editing tools: Text overlays, shape tools (rectangles, circles), blur/pixelation effects.
 * Timed or delayed screenshots.
 * Multi-level undo/redo (a simple "clear all annotations" might be considered).
-* Custom UI for region selection on X11.
+* Native Wayland window enumeration (due to security restrictions in the Wayland protocol).

@@ -1,8 +1,12 @@
 use anyhow::Result;
 use cairo;
 use gdk4;
+use gtk4::pango;
 use gtk4::prelude::*;
-use gtk4::{glib, Application, ApplicationWindow, Box, Button, DrawingArea, Label, Orientation};
+use gtk4::{
+    glib, Application, ApplicationWindow, Box, Button, DrawingArea, Label, ListBox, Orientation,
+    PolicyType, ScrolledWindow, SelectionMode,
+};
 use image::GenericImageView;
 use log::{error, info};
 use std::cell::RefCell;
@@ -14,6 +18,7 @@ mod capture;
 mod editor;
 mod tools;
 mod ui;
+mod window_manager;
 
 use capture::ScreenshotCapture;
 use editor::AnnotationEditor;
@@ -83,11 +88,17 @@ fn build_capture_ui(app: &Application) {
     let rect_button = Button::with_label("Selection");
     rect_button.set_size_request(200, 50);
 
+    // Window selection button
+    let window_button = Button::with_label("Window");
+    window_button.set_size_request(200, 50);
+
     // Clone app for the callbacks
     let app_clone = app.clone();
     let window_clone = window.clone();
     let app_clone2 = app.clone();
     let window_clone2 = window.clone();
+    let app_clone3 = app.clone();
+    let window_clone3 = window.clone();
 
     // Full screenshot button callback
     capture_button.connect_clicked(move |_| {
@@ -99,6 +110,12 @@ fn build_capture_ui(app: &Application) {
     rect_button.connect_clicked(move |_| {
         info!("Rectangle selection button clicked");
         start_screenshot_capture(app_clone2.clone(), window_clone2.clone(), true);
+    });
+
+    // Window selection button callback
+    window_button.connect_clicked(move |_| {
+        info!("Window selection button clicked");
+        start_window_selection_capture(app_clone3.clone(), window_clone3.clone());
     });
 
     // Keyboard shortcuts
@@ -140,6 +157,7 @@ fn build_capture_ui(app: &Application) {
     // Add buttons to button container
     button_box.append(&capture_button);
     button_box.append(&rect_button);
+    button_box.append(&window_button);
 
     // Add widgets to container
     main_box.append(&title_label);
@@ -828,6 +846,254 @@ fn proceed_with_cropped_screenshot(app: Application, window: ApplicationWindow, 
         Err(e) => {
             error!("Failed to create editor: {}", e);
             show_error_dialog(&window, &format!("Failed to open editor: {}", e));
+        }
+    }
+}
+
+fn start_window_selection_capture(app: Application, parent_window: ApplicationWindow) {
+    info!("Starting window selection capture");
+
+    // Hide the parent window
+    parent_window.set_visible(false);
+
+    // Create window manager
+    let window_manager = match window_manager::WindowManager::new() {
+        Ok(manager) => manager,
+        Err(e) => {
+            error!("Failed to create window manager: {}", e);
+            show_error_dialog(&parent_window, &format!("Window selection not available: {}\n\nThis feature requires X11. On Wayland, please use Screen or Selection capture instead.", e));
+            parent_window.set_visible(true);
+            return;
+        }
+    };
+
+    // Get list of windows
+    let windows = match window_manager.list_windows() {
+        Ok(windows) => windows,
+        Err(e) => {
+            error!("Failed to list windows: {}", e);
+            show_error_dialog(&parent_window, &format!("Failed to enumerate windows: {}\n\nThis feature requires X11. On Wayland, please use Screen or Selection capture instead.", e));
+            parent_window.set_visible(true);
+            return;
+        }
+    };
+
+    if windows.is_empty() {
+        show_error_dialog(&parent_window, "No capturable windows found. Please ensure you have open windows that are not minimized.");
+        parent_window.set_visible(true);
+        return;
+    }
+
+    show_window_selection_dialog(app, parent_window, windows, window_manager);
+}
+
+fn show_window_selection_dialog(
+    app: Application,
+    parent_window: ApplicationWindow,
+    windows: Vec<window_manager::WindowInfo>,
+    window_manager: window_manager::WindowManager,
+) {
+    info!(
+        "Showing window selection dialog with {} windows",
+        windows.len()
+    );
+
+    // Create the window selection dialog
+    let dialog = ApplicationWindow::builder()
+        .application(&app)
+        .title("Select Window to Capture")
+        .default_width(500)
+        .default_height(400)
+        .resizable(true)
+        .modal(true)
+        .build();
+
+    // Create main container
+    let main_box = Box::new(Orientation::Vertical, 10);
+    main_box.set_margin_start(20);
+    main_box.set_margin_end(20);
+    main_box.set_margin_top(20);
+    main_box.set_margin_bottom(20);
+
+    // Title label
+    let title_label = Label::new(Some("Select a window to capture:"));
+    title_label.add_css_class("title-2");
+    title_label.set_margin_bottom(10);
+
+    // Create scrolled window for the list
+    let scrolled = ScrolledWindow::new();
+    scrolled.set_policy(PolicyType::Never, PolicyType::Automatic);
+    scrolled.set_vexpand(true);
+
+    // Create list box for windows
+    let list_box = ListBox::new();
+    list_box.set_selection_mode(SelectionMode::Single);
+    list_box.add_css_class("boxed-list");
+
+    // Populate list with windows
+    for window_info in &windows {
+        let row = create_window_list_row(window_info);
+        list_box.append(&row);
+    }
+
+    scrolled.set_child(Some(&list_box));
+
+    // Button container
+    let button_box = Box::new(Orientation::Horizontal, 10);
+    button_box.set_halign(gtk4::Align::End);
+    button_box.set_margin_top(10);
+
+    // Cancel button
+    let cancel_button = Button::with_label("Cancel");
+    let dialog_clone = dialog.clone();
+    let parent_clone = parent_window.clone();
+    cancel_button.connect_clicked(move |_| {
+        dialog_clone.close();
+        parent_clone.set_visible(true);
+    });
+
+    // Capture button
+    let capture_button = Button::with_label("Capture Window");
+    capture_button.add_css_class("suggested-action");
+    capture_button.set_sensitive(false); // Initially disabled
+
+    // Enable capture button when selection changes
+    let capture_button_clone = capture_button.clone();
+    list_box.connect_row_selected(move |_, row| {
+        capture_button_clone.set_sensitive(row.is_some());
+    });
+
+    // Handle capture button click
+    let dialog_clone = dialog.clone();
+    let parent_clone = parent_window.clone();
+    let app_clone = app.clone();
+    let list_box_clone = list_box.clone();
+    let windows_clone = windows.clone();
+    capture_button.connect_clicked(move |_| {
+        if let Some(selected_row) = list_box_clone.selected_row() {
+            let window_index = selected_row.index() as usize;
+            if let Some(window_info) = windows_clone.get(window_index) {
+                info!(
+                    "Capturing window: {} (ID: {})",
+                    window_info.title, window_info.id
+                );
+
+                // Close the dialog
+                dialog_clone.close();
+
+                // Start window capture
+                proceed_with_window_capture(
+                    app_clone.clone(),
+                    parent_clone.clone(),
+                    window_info.id,
+                    &window_manager,
+                );
+            }
+        }
+    });
+
+    // Add buttons to container
+    button_box.append(&cancel_button);
+    button_box.append(&capture_button);
+
+    // Add all elements to main container
+    main_box.append(&title_label);
+    main_box.append(&scrolled);
+    main_box.append(&button_box);
+
+    dialog.set_child(Some(&main_box));
+
+    // Handle window close
+    let parent_clone = parent_window.clone();
+    dialog.connect_close_request(move |_| {
+        parent_clone.set_visible(true);
+        glib::Propagation::Proceed
+    });
+
+    dialog.present();
+}
+
+fn create_window_list_row(window_info: &window_manager::WindowInfo) -> Box {
+    let row_box = Box::new(Orientation::Horizontal, 12);
+    row_box.set_margin_start(12);
+    row_box.set_margin_end(12);
+    row_box.set_margin_top(8);
+    row_box.set_margin_bottom(8);
+
+    // Window info container
+    let info_box = Box::new(Orientation::Vertical, 4);
+    info_box.set_hexpand(true);
+
+    // Sanitize window title (remove null characters)
+    let sanitized_title = window_info.title.replace('\0', "");
+    let title_label = Label::new(Some(&sanitized_title));
+    title_label.set_halign(gtk4::Align::Start);
+    title_label.add_css_class("heading");
+    title_label.set_ellipsize(pango::EllipsizeMode::End);
+
+    // Sanitize window class and create details
+    let sanitized_class = window_info.class.replace('\0', "");
+    let details = if !sanitized_class.is_empty() && sanitized_class != "Unknown" {
+        format!(
+            "{} • {}×{}",
+            sanitized_class, window_info.width, window_info.height
+        )
+    } else {
+        format!("{}×{}", window_info.width, window_info.height)
+    };
+
+    let details_label = Label::new(Some(&details));
+    details_label.set_halign(gtk4::Align::Start);
+    details_label.add_css_class("dim-label");
+    details_label.add_css_class("caption");
+
+    info_box.append(&title_label);
+    info_box.append(&details_label);
+
+    row_box.append(&info_box);
+
+    row_box
+}
+
+fn proceed_with_window_capture(
+    app: Application,
+    parent_window: ApplicationWindow,
+    window_id: u64,
+    window_manager: &window_manager::WindowManager,
+) {
+    info!(
+        "Proceeding with window capture for window ID: {}",
+        window_id
+    );
+
+    // Add delay to ensure dialog is closed
+    std::thread::sleep(std::time::Duration::from_millis(200));
+
+    // Capture the window
+    match window_manager.capture_window(window_id) {
+        Ok(png_data) => {
+            info!("Window captured successfully, {} bytes", png_data.len());
+
+            // Close the parent window
+            parent_window.close();
+
+            // Open the editor with the captured window
+            match AnnotationEditor::new(&app, png_data) {
+                Ok(editor) => {
+                    info!("Editor created successfully for window capture");
+                    editor.show();
+                }
+                Err(e) => {
+                    error!("Failed to create editor: {}", e);
+                    show_error_dialog(&parent_window, &format!("Failed to open editor: {}", e));
+                    parent_window.set_visible(true);
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to capture window: {}", e);
+            show_error_dialog(&parent_window, &format!("Failed to capture window: {}", e));
+            parent_window.set_visible(true);
         }
     }
 }

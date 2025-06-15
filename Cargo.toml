@@ -20,6 +20,9 @@ anyhow = "1.0"
 log = "0.4"
 env_logger = "0.10"
 arboard = "3.2"
+x11rb = { version = "0.13", features = ["all-extensions"], optional = true }
+wayland-client = { version = "0.31", optional = true }
+wayland-protocols = { version = "0.31", features = ["client"], optional = true }
 
 [dependencies.gdk4-wayland]
 version = "0.8"
@@ -31,8 +34,8 @@ optional = true
 
 [features]
 default = ["wayland", "x11"]
-wayland = ["dep:gdk4-wayland"]
-x11 = ["dep:gdk4-x11"]
+wayland = ["dep:gdk4-wayland", "dep:wayland-client", "dep:wayland-protocols"]
+x11 = ["dep:gdk4-x11", "dep:x11rb"]
 
 [[bin]]
 name = "flint"
